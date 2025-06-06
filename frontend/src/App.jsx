@@ -13,7 +13,7 @@ function App() {
       setUser(JSON.parse(storedUser));
     }
   }, []);
-
+  const [isSidebarOpen, setSidebarOpen] = useState(true);
   // Wrapper function to handle user state and reset active menu
   const handleSetUser = (userData) => {
     setUser(userData);
@@ -27,7 +27,13 @@ function App() {
 
     return (
       <div className="flex bg-gray-100 min-h-screen">
-        <Sidebar active={active} setActive={setActive} user={user} />
+        <Sidebar
+          active={active}
+          setActive={setActive}
+          isOpen={isSidebarOpen}
+          setIsOpen={setSidebarOpen}
+          user={user}
+        />
         <div className="flex-1 p-6">
           <h2 className="text-2xl font-semibold mb-6">Trang: {active}</h2>
           {/* Nội dung động tùy theo mục được chọn */}

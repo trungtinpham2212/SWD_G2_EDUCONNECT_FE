@@ -31,8 +31,8 @@ const getMenuItems = (roleId) => {
   }
 };
 
-const Sidebar = ({ active, setActive, user }) => {
-  const [isOpen, setIsOpen] = useState(true);
+const Sidebar = ({ active, setActive, isOpen, setIsOpen, user }) => {
+
   const navigate = useNavigate();
 
   const menuItems = getMenuItems(user?.roleId);
@@ -64,7 +64,9 @@ const Sidebar = ({ active, setActive, user }) => {
           {menuItems.map((item, index) => (
             <li key={index}>
               <button
-                onClick={() => setActive(item.name)}
+                onClick={() => {
+                  setActive(item.name);
+                }}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200
                   ${active === item.name 
                     ? "bg-blue-600 text-white shadow-md" 
