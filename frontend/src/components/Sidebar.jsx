@@ -1,21 +1,45 @@
 import React, { useState } from "react";
-import { FaTachometerAlt, FaChalkboardTeacher, FaUserFriends, FaUserGraduate, FaChartBar, FaCog, FaBars, FaSignOutAlt } from "react-icons/fa";
+import { FaTachometerAlt, FaChalkboardTeacher, FaUserFriends, FaUserGraduate, FaChartBar, FaCog, FaBars, FaSignOutAlt, FaCalendarAlt } from "react-icons/fa";
+import { useNavigate } from "react-router-dom";
 
-const menuItems = [
-  { name: "Trang chủ", icon: <FaTachometerAlt /> },
-  { name: "Giáo viên", icon: <FaChalkboardTeacher /> },
-  { name: "Phụ huynh", icon: <FaUserFriends /> },
-  { name: "Học sinh", icon: <FaUserGraduate /> },
-  { name: "Báo cáo", icon: <FaChartBar /> },
-  { name: "Cài đặt", icon: <FaCog /> },
-];
+const getMenuItems = (roleId) => {
+  const baseItems = [
+    { name: "Trang chủ", icon: <FaTachometerAlt /> },
+  ];
 
-const Sidebar = ({ active, setActive }) => {
+  switch (roleId) {
+    case 1: // Admin
+      return [
+        ...baseItems,
+        { name: "Giáo viên", icon: <FaChalkboardTeacher /> },
+        { name: "Phụ huynh", icon: <FaUserFriends /> },
+        { name: "Học sinh", icon: <FaUserGraduate /> },
+        { name: "Báo cáo", icon: <FaChartBar /> },
+        { name: "Cài đặt", icon: <FaCog /> },
+      ];
+    case 2: // Giáo viên
+      return [
+        ...baseItems,
+        { name: "Lịch giảng dạy", icon: <FaCalendarAlt /> },
+        { name: "Học sinh", icon: <FaUserGraduate /> },
+        { name: "Báo cáo", icon: <FaChartBar /> },
+      ];
+    case 3: // Phụ huynh
+      return baseItems;
+    default:
+      return baseItems;
+  }
+};
+
+const Sidebar = ({ active, setActive, user }) => {
   const [isOpen, setIsOpen] = useState(true);
+  const navigate = useNavigate();
+
+  const menuItems = getMenuItems(user?.roleId);
 
   const handleLogout = () => {
-    // Xử lý logout ở đây
-    console.log("Logging out...");
+    localStorage.removeItem('user');
+    navigate('/login');
   };
 
   return (
@@ -63,18 +87,18 @@ const Sidebar = ({ active, setActive }) => {
         </ul>
       </nav>
 
-      {/* Footer with Logout */}
+      {/* Footer with User Info and Logout */}
       <div className="absolute bottom-0 left-0 right-0 border-t border-gray-100">
         <div className="p-4">
           <div className={`flex items-center ${isOpen ? 'justify-between' : 'justify-center'}`}>
             <div className="flex items-center min-w-0">
               <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white font-medium">
-                A
+                {user?.userName?.charAt(0)?.toUpperCase() || 'U'}
               </div>
               {isOpen && (
                 <div className="ml-3 flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-700 truncate">Admin</p>
-                  <p className="text-xs text-gray-500 truncate">admin@educonnect.com</p>
+                  <p className="text-sm font-medium text-gray-700 truncate">{user?.userName || 'User'}</p>
+                  <p className="text-xs text-gray-500 truncate">{user?.email || 'user@educonnect.com'}</p>
                 </div>
               )}
             </div>
