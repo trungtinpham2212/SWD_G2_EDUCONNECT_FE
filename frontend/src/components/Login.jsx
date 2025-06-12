@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FaUser, FaLock, FaGraduationCap, FaSignInAlt } from 'react-icons/fa';
+import { FaUser, FaLock, FaGraduationCap, FaSignInAlt, FaSpinner } from 'react-icons/fa';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import API_URL from '../config/api';
@@ -10,6 +10,7 @@ const Login = ({ setUser }) => {
     username: '',
     password: ''
   });
+  const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
 
   const handleChange = (e) => {
@@ -21,6 +22,7 @@ const Login = ({ setUser }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setIsLoading(true);
     try {
       const response = await fetch(`${API_URL}/api/UserAccount/login`, {
         method: 'POST',
@@ -47,6 +49,8 @@ const Login = ({ setUser }) => {
       }
     } catch (err) {
       toast.error('Có lỗi xảy ra, vui lòng thử lại sau');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -89,6 +93,7 @@ const Login = ({ setUser }) => {
                 onChange={handleChange}
                 placeholder="Tên đăng nhập"
                 className="pl-10 w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                disabled={isLoading}
               />
             </div>
             
@@ -105,18 +110,24 @@ const Login = ({ setUser }) => {
                 onChange={handleChange}
                 placeholder="Mật khẩu"
                 className="pl-10 w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                disabled={isLoading}
               />
             </div>
           </div>
 
           <button
             type="submit"
-            className="group relative w-full flex justify-center py-3 px-4 border border-transparent rounded-lg text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200"
+            disabled={isLoading}
+            className={`group relative w-full flex justify-center py-3 px-4 border border-transparent rounded-lg text-white ${isLoading ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'} focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200`}
           >
             <span className="absolute left-0 inset-y-0 flex items-center pl-3">
-              <FaSignInAlt className="h-5 w-5 text-blue-500 group-hover:text-blue-400" />
+              {isLoading ? (
+                <FaSpinner className="h-5 w-5 text-blue-300 animate-spin" />
+              ) : (
+                <FaSignInAlt className="h-5 w-5 text-blue-500 group-hover:text-blue-400" />
+              )}
             </span>
-            <span className="ml-3">Đăng nhập</span>
+            <span className="ml-3">{isLoading ? 'Đang đăng nhập...' : 'Đăng nhập'}</span>
           </button>
         </form>
 
