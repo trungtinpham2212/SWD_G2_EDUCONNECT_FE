@@ -5,10 +5,22 @@ const ITEMS_PER_PAGE = 20;
 
 const LOG_TYPE_MAP = {
   1: 'Đăng nhập',
-  2: 'Tạo mới',
-  3: 'Cập nhật',
-  4: 'Xóa',
-  5: 'Đăng xuất',
+  2: 'Cập nhật thông tin cá nhân',
+  3: 'Khoá tài khoản',
+  4: 'Đăng ký tài khoản',
+  5: 'Mở khoá tài khoản',
+  6: 'Xóa tài khoản',
+  7: 'Tạo báo cáo',
+  8: 'Cập nhật báo cáo',
+  9: 'Xóa báo cáo',
+  10: 'Xem báo cáo',
+  11: 'Tạo đánh giá',
+  12: 'Cập nhật đánh giá',
+  13: 'Xóa đánh giá',
+  14: 'Xem đánh giá',
+  15: 'Gửi tin nhắn',
+  16: 'Xóa tin nhắn',
+  17: 'Xem cuộc trò chuyện',
 };
 
 const ActivityLog = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) => {
@@ -50,8 +62,15 @@ const ActivityLog = ({ user, active, setActive, isSidebarOpen, setSidebarOpen })
     ? logs.filter(log => String(log.logactivitytype) === String(filterType))
     : logs;
 
-  const totalPages = Math.ceil(filteredLogs.length / ITEMS_PER_PAGE);
-  const paginatedLogs = filteredLogs.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+  // Sort logs mới nhất lên đầu
+  const sortedLogs = [...filteredLogs].sort((a, b) => {
+    const dateA = a.createat ? new Date(a.createat) : new Date(0);
+    const dateB = b.createat ? new Date(b.createat) : new Date(0);
+    return dateB - dateA;
+  });
+
+  const totalPages = Math.ceil(sortedLogs.length / ITEMS_PER_PAGE);
+  const paginatedLogs = sortedLogs.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
   const handlePageChange = (page) => {
     if (page >= 1 && page <= totalPages) setCurrentPage(page);
