@@ -1,22 +1,21 @@
 import React, { useEffect, useState } from 'react';
 import API_URL from '../config/api';
-import { useLocation } from 'react-router-dom';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
-const ITEMS_PER_PAGE = 20;
+const ITEMS_PER_PAGE = 15;
 
-const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) => {
+const EvaluationAdmin = () => {
   const [evaluations, setEvaluations] = useState([]);
   const [sections, setSections] = useState([]);
   const [classes, setClasses] = useState([]);
+  const [teachers, setTeachers] = useState([]);
+  const [userAccounts, setUserAccounts] = useState([]);
+  const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const [sortAsc, setSortAsc] = useState(false); // sort theo ngày
-  const location = useLocation();
-  const [students, setStudents] = useState([]);
-  const [userAccounts, setUserAccounts] = useState([]);
+  const [sortAsc, setSortAsc] = useState(false);
   const [showStudentModal, setShowStudentModal] = useState(false);
   const [modalStudents, setModalStudents] = useState([]);
 
@@ -24,28 +23,26 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
     const fetchData = async () => {
       try {
         setLoading(true);
-        // Lấy tất cả section mà giáo viên này dạy
-        const sectionRes = await fetch(`${API_URL}/api/Section`);
+        const [sectionRes, classRes, evalRes, teacherRes, userRes, studentRes] = await Promise.all([
+          fetch(`${API_URL}/api/Section`),
+          fetch(`${API_URL}/api/Class`),
+          fetch(`${API_URL}/api/Evaluation`),
+          fetch(`${API_URL}/api/Teacher`),
+          fetch(`${API_URL}/api/UserAccount/GetAllUserAccounts`),
+          fetch(`${API_URL}/api/Student`)
+        ]);
         const sectionData = await sectionRes.json();
-        const mySections = sectionData.filter(sec => Number(sec.teacherid) === Number(user?.teacherid));
-        setSections(mySections);
-        // Lấy tất cả lớp để map tên lớp
-        const classRes = await fetch(`${API_URL}/api/Class`);
         const classData = await classRes.json();
-        setClasses(classData);
-        // Lấy tất cả evaluation
-        const evalRes = await fetch(`${API_URL}/api/Evaluation`);
         const evalData = await evalRes.json();
-        // Chỉ lấy evaluation thuộc các section mà giáo viên này dạy
-        const mySectionIds = new Set(mySections.map(sec => Number(sec.sectionid)));
-        const filteredEvaluations = evalData.filter(ev => mySectionIds.has(Number(ev.sectionid)));
-        setEvaluations(filteredEvaluations);
-        const studentRes = await fetch(`${API_URL}/api/Student`);
-        const studentData = await studentRes.json();
-        setStudents(studentData);
-        const userRes = await fetch(`${API_URL}/api/UserAccount/GetAllUserAccounts`);
+        const teacherData = await teacherRes.json();
         const userData = await userRes.json();
+        const studentData = await studentRes.json();
+        setSections(sectionData);
+        setClasses(classData);
+        setEvaluations(evalData);
+        setTeachers(teacherData);
         setUserAccounts(userData);
+        setStudents(studentData);
         setError(null);
       } catch (err) {
         setError('Không thể tải dữ liệu đánh giá. Vui lòng thử lại sau.');
@@ -53,56 +50,27 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
         setLoading(false);
       }
     };
-    if (user?.teacherid) {
-      fetchData();
-    }
-    // eslint-disable-next-line
-  }, [user?.teacherid, location.pathname]);
+    fetchData();
+  }, []);
 
-  // Helper lấy thông tin section và lớp
-  const getSectionInfo = (sectionid) => sections.find(sec => sec.sectionid === sectionid);
+  const getSectionInfo = (sectionid) => sections.find(sec => Number(sec.sectionid) === Number(sectionid));
   const getClassName = (classid) => {
-    const cls = classes.find(c => c.classid === classid);
+    const cls = classes.find(c => Number(c.classid) === Number(classid));
     return cls ? cls.classname : `Lớp ${classid}`;
   };
+  const getTeacherName = (sectionid) => {
+    const sec = getSectionInfo(sectionid);
+    if (!sec) return '-';
+    const teacher = teachers.find(t => Number(t.teacherid) === Number(sec.teacherid));
+    if (!teacher) return '-';
+    const user = userAccounts.find(u => Number(u.userid) === Number(teacher.userid));
+    return user ? user.fullname : '-';
+  };
 
-  // Sort evaluations theo giờ tạo (createdat) mặc định, hoặc theo ngày section nếu bấm sort
-  const sortedEvaluations = sortAsc
-    ? [...evaluations].sort((a, b) => {
-        // sort tăng dần theo ngày sectiondate
-        const secA = getSectionInfo(a.sectionid);
-        const secB = getSectionInfo(b.sectionid);
-        const dateA = secA ? new Date(secA.sectiondate) : new Date(0);
-        const dateB = secB ? new Date(secB.sectiondate) : new Date(0);
-        return dateA - dateB;
-      })
-    : [...evaluations].sort((a, b) => {
-        // sort giảm dần theo giờ tạo (createdat)
-        const dateA = new Date(a.createdat);
-        const dateB = new Date(b.createdat);
-        return dateB - dateA;
-      });
-
-  // Pagination
-  const totalPages = Math.ceil(sortedEvaluations.length / ITEMS_PER_PAGE);
-  const paginatedEvaluations = sortedEvaluations.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
-
-  // Helper lấy ngày và giờ từ datetime
   const getDateTime = (datetime) => {
     if (!datetime) return '-';
     const d = new Date(datetime);
     return d.toLocaleDateString('vi-VN') + ' ' + d.toLocaleTimeString('vi-VN', { hour12: false });
-  };
-
-  // Handler sort
-  const handleSortDate = () => {
-    setSortAsc((prev) => !prev);
-    setCurrentPage(1);
-  };
-
-  // Handler chuyển trang
-  const handlePageChange = (page) => {
-    if (page >= 1 && page <= totalPages) setCurrentPage(page);
   };
 
   const getStudentNames = (evaluation) => {
@@ -118,6 +86,32 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
     setShowStudentModal(true);
   };
 
+  const sortedEvaluations = sortAsc
+    ? [...evaluations].sort((a, b) => {
+        const secA = getSectionInfo(a.sectionid);
+        const secB = getSectionInfo(b.sectionid);
+        const dateA = secA ? new Date(secA.sectiondate) : new Date(0);
+        const dateB = secB ? new Date(secB.sectiondate) : new Date(0);
+        return dateA - dateB;
+      })
+    : [...evaluations].sort((a, b) => {
+        const dateA = new Date(a.createdat);
+        const dateB = new Date(b.createdat);
+        return dateB - dateA;
+      });
+
+  const totalPages = Math.ceil(sortedEvaluations.length / ITEMS_PER_PAGE);
+  const paginatedEvaluations = sortedEvaluations.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+
+  const handleSortDate = () => {
+    setSortAsc((prev) => !prev);
+    setCurrentPage(1);
+  };
+
+  const handlePageChange = (page) => {
+    if (page >= 1 && page <= totalPages) setCurrentPage(page);
+  };
+
   return (
     <div className="flex-1 p-6">
       <h2 className="text-2xl font-semibold mb-6">Quản lý đánh giá</h2>
@@ -130,7 +124,7 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
         ) : error ? (
           <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-600">{error}</div>
         ) : evaluations.length === 0 ? (
-          <div className="text-gray-500">Không có đánh giá nào cho các tiết bạn dạy.</div>
+          <div className="text-gray-500">Không có đánh giá nào.</div>
         ) : (
           <>
             <div className="overflow-x-auto">
@@ -147,6 +141,7 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
                       <span className="ml-1">{sortAsc ? '▲' : '▼'}</span>
                     </th>
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Lớp</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giáo viên đánh giá</th>
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nội dung đánh giá</th>
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giờ tạo</th>
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Học sinh</th>
@@ -161,6 +156,7 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
                         <td className="px-4 py-2 text-sm text-gray-900">{sec ? sec.sectionno : '-'}</td>
                         <td className="px-4 py-2 text-sm text-gray-900">{sec ? new Date(sec.sectiondate).toLocaleDateString('vi-VN') : '-'}</td>
                         <td className="px-4 py-2 text-sm text-gray-900">{sec ? getClassName(sec.classid) : '-'}</td>
+                        <td className="px-4 py-2 text-sm text-gray-900">{getTeacherName(ev.sectionid)}</td>
                         <td className="px-4 py-2 text-sm text-gray-900 max-w-xs whitespace-pre-line break-words">{ev.content}</td>
                         <td className="px-4 py-2 text-sm text-gray-900">{getDateTime(ev.createdat)}</td>
                         <td className="px-4 py-2 text-sm text-gray-900">
@@ -174,7 +170,6 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
                 </tbody>
               </table>
             </div>
-            {/* Pagination */}
             <div className="flex justify-center items-center mt-6 gap-2">
               <button
                 className="px-3 py-1 rounded border bg-gray-100 hover:bg-gray-200"
@@ -225,4 +220,4 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
   );
 };
 
-export default EvaluationManagement;
+export default EvaluationAdmin;

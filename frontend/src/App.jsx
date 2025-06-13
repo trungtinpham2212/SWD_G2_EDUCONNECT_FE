@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { createRoutes } from './routers/router';
+import SectionDetail from './pages/SectionDetail';
 
 function App() {
   const [active, setActive] = useState("Trang chủ");
@@ -59,6 +60,7 @@ function App() {
         {routes.map((route, index) => (
           <Route key={index} path={route.path} element={route.element} />
         ))}
+        <Route path="/section/:sectionid" element={<SectionDetail />} />
       </Routes>
     </Router>
   );

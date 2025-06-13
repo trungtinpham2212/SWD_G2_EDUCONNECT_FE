@@ -17,14 +17,14 @@ const getMenuItems = (roleId) => {
           subItems: [
             { name: "Giáo viên", icon: <FaChalkboardTeacher />, path: "/teachers" },
             { name: "Phụ huynh", icon: <FaUserFriends />, path: "/parents" },
-            { name: "Học sinh", icon: <FaUserGraduate />, path: "/students" },
+            { name: "Học sinh", icon: <FaUserGraduate />, path: "/admin/students" },
           ]
         },
         { name: "Quản lý năm học", icon: <FaCalendar />, path: "/school-years" },
         { name: "Quản lý môn học", icon: <FaBook />, path: "/subjects" },
         { name: "Quản lý lớp học", icon: <FaChalkboard />, path: "/classes" },
         { name: "Quản lý tiết học", icon: <FaClock />, path: "/sessions" },
-        { name: "Quản lý đánh giá", icon: <FaStar />, path: "/evaluations" },
+        { name: "Quản lý đánh giá", icon: <FaStar />, path: "/admin/evaluations" },
         { name: "Báo cáo", icon: <FaChartBar />, path: "/reports" },
         { name: "Lịch sử hoạt động", icon: <FaHistory />, path: "/activity-logs" },
         { name: "Cài đặt", icon: <FaCog />, path: "/settings" },

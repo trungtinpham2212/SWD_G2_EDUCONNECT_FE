@@ -14,6 +14,9 @@ import ActivityLog from "../pages/ActivityLog";
 import Setting from "../pages/Setting";
 import Schedule from "../pages/Schedule";
 import Sidebar from "../components/Sidebar";
+import SectionDetail from "../pages/SectionDetail";
+import StudentAdmin from '../pages/StudentAdmin';
+import EvaluationAdmin from '../pages/EvaluationAdmin';
 
 // Layout component for protected routes
 const ProtectedLayout = ({ element: Component, allowedRoles, user, ...props }) => {
@@ -156,6 +159,30 @@ export const createRoutes = ({ user, active, setActive, isSidebarOpen, setSideba
       element: <ProtectedLayout 
         element={Schedule}
         allowedRoles={[2]} // Only Teachers can access
+        {...commonProps}
+      />
+    },
+    {
+      path: "/section/:sectionid",
+      element: <ProtectedLayout 
+        element={SectionDetail}
+        allowedRoles={[1,2]}
+        {...commonProps}
+      />
+    },
+    {
+      path: "/admin/students",
+      element: <ProtectedLayout 
+        element={StudentAdmin}
+        allowedRoles={[1]}
+        {...commonProps}
+      />
+    },
+    {
+      path: "/admin/evaluations",
+      element: <ProtectedLayout 
+        element={EvaluationAdmin}
+        allowedRoles={[1]}
         {...commonProps}
       />
     },

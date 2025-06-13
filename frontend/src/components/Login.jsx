@@ -38,7 +38,8 @@ const Login = ({ setUser }) => {
           token: data.token,
           userName: data.userName,
           email: data.email,
-          roleId: data.roleId
+          roleId: data.roleId,
+          teacherid: data.teacherid
         };
         localStorage.setItem('user', JSON.stringify(userData));
         setUser(userData);
