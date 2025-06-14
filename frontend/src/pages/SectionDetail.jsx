@@ -242,7 +242,7 @@ const SectionDetail = () => {
                           />
                         </td>
                         <td className="px-4 py-2 text-sm text-gray-500">{idx + 1}</td>
-                        <td className="px-4 py-2 text-sm text-gray-900">{stu.name}</td>
+                        <td className="px-4 py-2 text-sm text-gray-900"><b>{stu.name}</b></td>
                         <td className="px-4 py-2 text-sm text-gray-900">{new Date(stu.dateofbirth).toLocaleDateString('vi-VN')}</td>
                         <td className="px-4 py-2 text-sm text-gray-900">
                           {parent ? (
