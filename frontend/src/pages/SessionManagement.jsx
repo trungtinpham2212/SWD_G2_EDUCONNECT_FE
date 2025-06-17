@@ -17,8 +17,8 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
     subjectid: '',
     classid: '',
     teacherid: '',
-    sectionno: '',
-    sectiondate: ''
+    periodno: '',
+    perioddate: ''
   });
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 15;
@@ -32,15 +32,15 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
       try {
         setLoading(true);
         const [sectionRes, subjectRes, classRes, teacherRes, userRes] = await Promise.all([
-          fetch(`${API_URL}/api/Section`),
+          fetch(`${API_URL}/api/Period`),
           fetch(`${API_URL}/api/Subject`),
           fetch(`${API_URL}/api/Class`),
           fetch(`${API_URL}/api/Teacher`),
           fetch(`${API_URL}/api/UserAccount/GetAllUserAccounts`)
         ]);
         const sectionData = await sectionRes.json();
-        // Sort sections theo sectionid giảm dần (mới nhất lên trước)
-        sectionData.sort((a, b) => b.sectionid - a.sectionid);
+        // Sort sections theo periodid giảm dần (mới nhất lên trước)
+        sectionData.sort((a, b) => b.periodid - a.periodid);
         setSections(sectionData);
         setSubjects(await subjectRes.json());
         setClasses(await classRes.json());
@@ -76,7 +76,7 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
   };
 
   const resetForm = () => {
-    setForm({ subjectid: '', classid: '', teacherid: '', sectionno: '', sectiondate: '' });
+    setForm({ subjectid: '', classid: '', teacherid: '', periodno: '', perioddate: '' });
     setEditSection(null);
   };
 
@@ -87,8 +87,8 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
         subjectid: section.subjectid,
         classid: section.classid,
         teacherid: section.teacherid,
-        sectionno: section.sectionno,
-        sectiondate: section.sectiondate ? section.sectiondate.split('T')[0] : ''
+        periodno: section.periodno,
+        perioddate: section.perioddate ? section.perioddate.split('T')[0] : ''
       });
     } else {
       resetForm();
@@ -102,34 +102,100 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
   };
 
   const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    const newForm = { ...form, [name]: value };
+    
+    // Kiểm tra trùng lịch khi thay đổi tiết, ngày hoặc lớp
+    if (['periodno', 'perioddate', 'classid'].includes(name)) {
+      const hasOverlap = isPeriodExists(
+        newForm.periodno,
+        newForm.perioddate,
+        newForm.classid,
+        editSection?.periodid
+      );
+      
+      if (hasOverlap) {
+        toast.error('Lớp này đã có tiết học vào thời gian này');
+      }
+    }
+    
+    setForm(newForm);
+  };
+
+  const isPeriodExists = (periodno, perioddate, classid, excludePeriodId = null) => {
+    // Kiểm tra các tham số có hợp lệ không
+    if (!periodno || !perioddate || !classid) return false;
+
+    // Chuyển đổi ngày thành chuỗi YYYY-MM-DD để so sánh
+    const dateToCheck = new Date(perioddate).toISOString().split('T')[0];
+    
+    return sections.some(section => {
+      // Bỏ qua tiết học đang được sửa
+      if (excludePeriodId && section.periodid === excludePeriodId) return false;
+      
+      // Chuyển đổi ngày của tiết học đang kiểm tra
+      const sectionDate = new Date(section.perioddate).toISOString().split('T')[0];
+      
+      // So sánh tiết số, ngày và lớp
+      return Number(periodno) === section.periodno && 
+             dateToCheck === sectionDate &&
+             Number(classid) === section.classid;
+    });
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // Validate dữ liệu đầu vào
+    if (!form.periodno || !form.perioddate || !form.classid) {
+      toast.error('Vui lòng điền đầy đủ thông tin tiết học');
+      return;
+    }
+
+    // Kiểm tra trùng lịch
+    const hasOverlap = isPeriodExists(
+      form.periodno,
+      form.perioddate,
+      form.classid,
+      editSection?.periodid
+    );
+
+    if (hasOverlap) {
+      toast.error('Lớp này đã có tiết học vào thời gian này');
+      return;
+    }
+
     try {
       setLoading(true);
       const method = editSection ? 'PUT' : 'POST';
-      const url = editSection ? `${API_URL}/api/Section/${editSection.sectionid}` : `${API_URL}/api/Section`;
+      const url = editSection ? `${API_URL}/api/Period/${editSection.periodid}` : `${API_URL}/api/Period`;
+      
       const body = {
-        sectionid: editSection ? editSection.sectionid : 0,
+        periodid: editSection ? editSection.periodid : 0,
         subjectid: Number(form.subjectid),
         classid: Number(form.classid),
         teacherid: Number(form.teacherid),
-        sectionno: Number(form.sectionno),
-        sectiondate: form.sectiondate
+        periodno: Number(form.periodno),
+        perioddate: form.perioddate
       };
+
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
       });
-      if (!res.ok) throw new Error('Lưu tiết học thất bại');
+
+      if (!res.ok) {
+        const errorData = await res.text();
+        throw new Error(errorData || 'Lưu tiết học thất bại');
+      }
+
       // Reload data
-      const sectionRes = await fetch(`${API_URL}/api/Section`);
+      const sectionRes = await fetch(`${API_URL}/api/Period`);
       const sectionData = await sectionRes.json();
-      sectionData.sort((a, b) => b.sectionid - a.sectionid);
+      sectionData.sort((a, b) => b.periodid - a.periodid);
       setSections(sectionData);
+      
       setShowModal(false);
       resetForm();
       toast.success('Lưu tiết học thành công!');
@@ -140,17 +206,17 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
     }
   };
 
-  const handleDelete = async (sectionid) => {
-    setSectionToDelete(sectionid);
+  const handleDelete = async (periodid) => {
+    setSectionToDelete(periodid);
     setShowDeleteModal(true);
   };
 
   const confirmDelete = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`${API_URL}/api/Section/${sectionToDelete}`, { method: 'DELETE' });
+      const res = await fetch(`${API_URL}/api/Period/${sectionToDelete}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Xóa tiết học thất bại');
-      setSections(sections.filter(s => s.sectionid !== sectionToDelete));
+      setSections(sections.filter(s => s.periodid !== sectionToDelete));
       toast.success('Xóa tiết học thành công!');
     } catch (err) {
       toast.error(err.message);
@@ -205,23 +271,23 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
                   </tr>
                 ) : (
                   currentSections.map((s, idx) => (
-                    <tr key={s.sectionid}>
+                    <tr key={s.periodid}>
                       <td className="px-4 py-2 text-sm text-gray-500">{(currentPage - 1) * itemsPerPage + idx + 1}</td>
                       <td className="px-4 py-2 text-sm text-gray-900">{getSubjectName(s.subjectid)}</td>
                       <td className="px-4 py-2 text-sm text-gray-900">{getClassName(s.classid)}</td>
                       <td className="px-4 py-2 text-sm text-gray-900">{getTeacherName(s.teacherid)}</td>
-                      <td className="px-4 py-2 text-sm text-gray-900">{s.sectionno}</td>
-                      <td className="px-4 py-2 text-sm text-gray-900">{s.sectiondate ? new Date(s.sectiondate).toLocaleDateString('vi-VN') : '-'}</td>
+                      <td className="px-4 py-2 text-sm text-gray-900">{s.periodno}</td>
+                      <td className="px-4 py-2 text-sm text-gray-900">{s.perioddate ? new Date(s.perioddate).toLocaleDateString('vi-VN') : '-'}</td>
                       <td className="px-4 py-2 text-sm text-gray-900">
                         <button
-                          className="px-3 py-1 bg-yellow-400 text-white rounded hover:bg-yellow-500 mr-2"
+                          className="px-3 py-1 bg-yellow-600 text-white rounded hover:bg-yellow-700 mr-2"
                           onClick={() => handleOpenModal(s)}
                         >
                           Sửa
                         </button>
                         <button
                           className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700"
-                          onClick={() => handleDelete(s.sectionid)}
+                          onClick={() => handleDelete(s.periodid)}
                         >
                           Xóa
                         </button>
@@ -274,7 +340,12 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
                   name="classid"
                   value={form.classid}
                   onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className={`w-full px-3 py-2 border ${
+                    form.classid && form.periodno && form.perioddate && 
+                    isPeriodExists(form.periodno, form.perioddate, form.classid, editSection?.periodid) 
+                      ? 'border-red-500' 
+                      : 'border-gray-300'
+                  } rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500`}
                   required
                 >
                   <option value="">-- Chọn lớp --</option>
@@ -305,10 +376,15 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">Tiết</label>
                 <select
-                  name="sectionno"
-                  value={form.sectionno}
+                  name="periodno"
+                  value={form.periodno}
                   onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className={`w-full px-3 py-2 border ${
+                    form.classid && form.periodno && form.perioddate && 
+                    isPeriodExists(form.periodno, form.perioddate, form.classid, editSection?.periodid) 
+                      ? 'border-red-500' 
+                      : 'border-gray-300'
+                  } rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500`}
                   required
                 >
                   <option value="">-- Chọn tiết --</option>
@@ -316,15 +392,24 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
                     <option key={num} value={num}>Tiết {num}</option>
                   ))}
                 </select>
+                {form.classid && form.periodno && form.perioddate && 
+                 isPeriodExists(form.periodno, form.perioddate, form.classid, editSection?.periodid) && (
+                  <p className="mt-1 text-sm text-red-600">Lớp này đã có tiết học vào thời gian này</p>
+                )}
               </div>
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">Ngày</label>
                 <input
                   type="date"
-                  name="sectiondate"
-                  value={form.sectiondate}
+                  name="perioddate"
+                  value={form.perioddate}
                   onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className={`w-full px-3 py-2 border ${
+                    form.classid && form.periodno && form.perioddate && 
+                    isPeriodExists(form.periodno, form.perioddate, form.classid, editSection?.periodid) 
+                      ? 'border-red-500' 
+                      : 'border-gray-300'
+                  } rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500`}
                   required
                 />
               </div>
@@ -340,7 +425,13 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
                 <button
                   type="submit"
                   className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
-                  disabled={loading}
+                  disabled={
+                    loading || 
+                    !form.classid || 
+                    !form.periodno || 
+                    !form.perioddate ||
+                    isPeriodExists(form.periodno, form.perioddate, form.classid, editSection?.periodid)
+                  }
                 >
                   {editSection ? 'Lưu thay đổi' : 'Thêm mới'}
                 </button>

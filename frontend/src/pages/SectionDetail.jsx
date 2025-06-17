@@ -27,7 +27,7 @@ const SectionDetail = () => {
       try {
         setLoading(true);
         // Fetch section info
-        const sectionRes = await fetch(`${API_URL}/api/Section/${sectionid}`);
+        const sectionRes = await fetch(`${API_URL}/api/Period/${sectionid}`);
         if (!sectionRes.ok) throw new Error('Không thể tải dữ liệu tiết học');
         const sectionData = await sectionRes.json();
         setSectionInfo(sectionData);
@@ -134,7 +134,7 @@ const SectionDetail = () => {
       const pad = (n) => n.toString().padStart(2, '0');
       const createdAtStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
       const evaluationData = {
-        sectionid: Number(sectionid),
+        periodid: Number(sectionid),
         content: contentToSend,
         activityid: Number(selectedActivityId),
         students: studentsArr,
@@ -193,8 +193,8 @@ const SectionDetail = () => {
           <>
             <h2 className="text-2xl font-bold mb-4">Thông tin tiết học</h2>
             <div className="mb-2"><b>Lớp:</b> {classInfo.classname}</div>
-            <div className="mb-2"><b>Tiết:</b> {sectionInfo.sectionno}</div>
-            <div className="mb-2"><b>Ngày:</b> {new Date(sectionInfo.sectiondate).toLocaleDateString('vi-VN')}</div>
+            <div className="mb-2"><b>Tiết:</b> {sectionInfo.periodno}</div>
+            <div className="mb-2"><b>Ngày:</b> {new Date(sectionInfo.perioddate).toLocaleDateString('vi-VN')}</div>
             <div className="mb-2"><b>Giáo viên chủ nhiệm:</b> {teacherName}</div>
             <div className="mb-4"><b>Sĩ số:</b> {students.length}</div>
             <div className="flex justify-between items-center mb-4">
@@ -204,7 +204,9 @@ const SectionDetail = () => {
                   onClick={() => setShowEvaluationModal(true)}
                   className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
                 >
-                  Đánh giá ({selectedStudents.length} học sinh)
+                  Đánh giá {selectedStudents.length === students.length 
+                    ? "cả lớp" 
+                    : `(${selectedStudents.length} học sinh)`}
                 </button>
               )}
             </div>

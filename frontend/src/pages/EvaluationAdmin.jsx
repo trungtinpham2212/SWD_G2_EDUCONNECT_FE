@@ -18,33 +18,63 @@ const EvaluationAdmin = () => {
   const [sortAsc, setSortAsc] = useState(false);
   const [showStudentModal, setShowStudentModal] = useState(false);
   const [modalStudents, setModalStudents] = useState([]);
+  const [currentEvaluation, setCurrentEvaluation] = useState(null);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const [sectionRes, classRes, evalRes, teacherRes, userRes, studentRes] = await Promise.all([
-          fetch(`${API_URL}/api/Section`),
-          fetch(`${API_URL}/api/Class`),
-          fetch(`${API_URL}/api/Evaluation`),
-          fetch(`${API_URL}/api/Teacher`),
-          fetch(`${API_URL}/api/UserAccount/GetAllUserAccounts`),
-          fetch(`${API_URL}/api/Student`)
+        
+        // Add headers like in Postman
+        const headers = {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        };
+
+        // Fetch evaluations with detailed logging
+        const evalRes = await fetch(`${API_URL}/api/Evaluation`, { headers });
+        console.log('Evaluation Response Status:', evalRes.status);
+        console.log('Evaluation Response Headers:', Object.fromEntries(evalRes.headers.entries()));
+        
+        if (!evalRes.ok) {
+          throw new Error(`Evaluation fetch failed with status: ${evalRes.status}`);
+        }
+
+        const evalText = await evalRes.text(); // Get raw response text
+        console.log('Raw Evaluation Response:', evalText);
+        
+        let evalData;
+        try {
+          evalData = JSON.parse(evalText);
+          console.log('Parsed Evaluation Data:', evalData);
+        } catch (e) {
+          console.error('JSON Parse Error:', e);
+          throw new Error('Failed to parse evaluation data');
+        }
+
+        // Fetch other data
+        const [sectionRes, classRes, teacherRes, userRes] = await Promise.all([
+          fetch(`${API_URL}/api/Period`, { headers }),
+          fetch(`${API_URL}/api/Class`, { headers }),
+          fetch(`${API_URL}/api/Teacher`, { headers }),
+          fetch(`${API_URL}/api/UserAccount/GetAllUserAccounts`, { headers })
         ]);
-        const sectionData = await sectionRes.json();
-        const classData = await classRes.json();
-        const evalData = await evalRes.json();
-        const teacherData = await teacherRes.json();
-        const userData = await userRes.json();
-        const studentData = await studentRes.json();
-        setSections(sectionData);
-        setClasses(classData);
+
+        const [sections, classes, teachers, users] = await Promise.all([
+          sectionRes.json(),
+          classRes.json(),
+          teacherRes.json(),
+          userRes.json()
+        ]);
+
+        setSections(sections);
+        setClasses(classes);
+        setTeachers(teachers);
+        setUserAccounts(users);
         setEvaluations(evalData);
-        setTeachers(teacherData);
-        setUserAccounts(userData);
-        setStudents(studentData);
         setError(null);
       } catch (err) {
+        console.error('Error in fetchData:', err);
         setError('Không thể tải dữ liệu đánh giá. Vui lòng thử lại sau.');
       } finally {
         setLoading(false);
@@ -53,13 +83,13 @@ const EvaluationAdmin = () => {
     fetchData();
   }, []);
 
-  const getSectionInfo = (sectionid) => sections.find(sec => Number(sec.sectionid) === Number(sectionid));
+  const getSectionInfo = (periodid) => sections.find(sec => Number(sec.periodid) === Number(periodid));
   const getClassName = (classid) => {
     const cls = classes.find(c => Number(c.classid) === Number(classid));
     return cls ? cls.classname : `Lớp ${classid}`;
   };
-  const getTeacherName = (sectionid) => {
-    const sec = getSectionInfo(sectionid);
+  const getTeacherName = (periodid) => {
+    const sec = getSectionInfo(periodid);
     if (!sec) return '-';
     const teacher = teachers.find(t => Number(t.teacherid) === Number(sec.teacherid));
     if (!teacher) return '-';
@@ -73,25 +103,51 @@ const EvaluationAdmin = () => {
     return d.toLocaleDateString('vi-VN') + ' ' + d.toLocaleTimeString('vi-VN', { hour12: false });
   };
 
-  const getStudentNames = (evaluation) => {
-    if (!evaluation.students || !Array.isArray(evaluation.students)) return [];
-    return evaluation.students.map(evStu => {
-      const stu = students.find(s => s.studentid === evStu.studentid);
-      return stu ? stu.name : `HS ${evStu.studentid}`;
-    });
+  const handleShowStudents = (evaluation) => {
+    console.log('Full Evaluation Object:', evaluation);
+    console.log('Students Array:', evaluation?.students);
+    
+    if (evaluation?.students?.length > 0) {
+      console.log('First Student:', evaluation.students[0]);
+      setModalStudents(evaluation.students);
+    } else {
+      console.log('No students found in evaluation');
+      setModalStudents([]);
+    }
+    setCurrentEvaluation(evaluation);
+    setShowStudentModal(true);
   };
 
-  const handleShowStudents = (evaluation) => {
-    setModalStudents(getStudentNames(evaluation));
-    setShowStudentModal(true);
+  const getStudentPreview = (evaluation) => {
+    if (!evaluation?.students?.length) return '(0)';
+    
+    // Tìm lớp của học sinh đầu tiên
+    const firstStudent = evaluation.students[0];
+    if (!firstStudent?.classid) return `(${evaluation.students.length})`;
+
+    // Lấy danh sách học sinh trong lớp đó
+    const classStudents = evaluations
+      .filter(e => e.students?.length > 0 && e.students[0].classid === firstStudent.classid)
+      .flatMap(e => e.students);
+    
+    // Lấy số lượng học sinh duy nhất trong lớp
+    const uniqueStudents = new Set(classStudents.map(s => s.studentid));
+    const classSize = uniqueStudents.size;
+    
+    // Nếu số học sinh trong đánh giá bằng sĩ số lớp
+    if (evaluation.students.length === classSize) {
+      return 'cả lớp';
+    }
+    
+    return `${evaluation.students.length} học sinh`;
   };
 
   const sortedEvaluations = sortAsc
     ? [...evaluations].sort((a, b) => {
-        const secA = getSectionInfo(a.sectionid);
-        const secB = getSectionInfo(b.sectionid);
-        const dateA = secA ? new Date(secA.sectiondate) : new Date(0);
-        const dateB = secB ? new Date(secB.sectiondate) : new Date(0);
+        const secA = getSectionInfo(a.periodid);
+        const secB = getSectionInfo(b.periodid);
+        const dateA = secA ? new Date(secA.perioddate) : new Date(0);
+        const dateB = secB ? new Date(secB.perioddate) : new Date(0);
         return dateA - dateB;
       })
     : [...evaluations].sort((a, b) => {
@@ -149,19 +205,22 @@ const EvaluationAdmin = () => {
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {paginatedEvaluations.map((ev, idx) => {
-                    const sec = getSectionInfo(ev.sectionid);
+                    const sec = getSectionInfo(ev.periodid);
                     return (
                       <tr key={ev.evaluationid}>
                         <td className="px-4 py-2 text-sm text-gray-500">{(currentPage - 1) * ITEMS_PER_PAGE + idx + 1}</td>
-                        <td className="px-4 py-2 text-sm text-gray-900">{sec ? sec.sectionno : '-'}</td>
-                        <td className="px-4 py-2 text-sm text-gray-900">{sec ? new Date(sec.sectiondate).toLocaleDateString('vi-VN') : '-'}</td>
+                        <td className="px-4 py-2 text-sm text-gray-900">{sec ? sec.periodno : '-'}</td>
+                        <td className="px-4 py-2 text-sm text-gray-900">{sec ? new Date(sec.perioddate).toLocaleDateString('vi-VN') : '-'}</td>
                         <td className="px-4 py-2 text-sm text-gray-900">{sec ? getClassName(sec.classid) : '-'}</td>
-                        <td className="px-4 py-2 text-sm text-gray-900">{getTeacherName(ev.sectionid)}</td>
+                        <td className="px-4 py-2 text-sm text-gray-900">{getTeacherName(ev.periodid)}</td>
                         <td className="px-4 py-2 text-sm text-gray-900 max-w-xs whitespace-pre-line break-words">{ev.content}</td>
                         <td className="px-4 py-2 text-sm text-gray-900">{getDateTime(ev.createdat)}</td>
                         <td className="px-4 py-2 text-sm text-gray-900">
-                          <button className="px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600" onClick={() => handleShowStudents(ev)}>
-                            Xem học sinh
+                          <button 
+                            className="px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
+                            onClick={() => handleShowStudents(ev)}
+                          >
+                            Xem {getStudentPreview(ev)} 
                           </button>
                         </td>
                       </tr>
@@ -199,19 +258,48 @@ const EvaluationAdmin = () => {
         )}
       </div>
       {/* Modal danh sách học sinh */}
-      {showStudentModal && (
+      {showStudentModal && currentEvaluation && (
         <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md">
-            <h3 className="text-lg font-semibold mb-4">Danh sách học sinh trong đánh giá</h3>
-            <ul className="list-disc ml-4 mb-4">
+            <h3 className="text-lg font-semibold mb-4">
+              Danh sách {getStudentPreview(currentEvaluation)} trong đánh giá
+            </h3>
+            <div className="max-h-96 overflow-y-auto">
               {modalStudents.length === 0 ? (
-                <li>Không có học sinh</li>
+                <p className="text-gray-500">Không có học sinh</p>
               ) : (
-                modalStudents.map((name, idx) => <li key={idx}>{name}</li>)
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">STT</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Họ và tên</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ngày sinh</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {modalStudents.map((student, idx) => (
+                      <tr key={student.studentid}>
+                        <td className="px-4 py-2 text-sm text-gray-500">{idx + 1}</td>
+                        <td className="px-4 py-2 text-sm font-medium text-gray-900">{student.name}</td>
+                        <td className="px-4 py-2 text-sm text-gray-900">
+                          {student.dateofbirth ? new Date(student.dateofbirth).toLocaleDateString('vi-VN') : '-'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               )}
-            </ul>
-            <div className="flex justify-end">
-              <button className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300 text-gray-700" onClick={() => setShowStudentModal(false)}>Đóng</button>
+            </div>
+            <div className="flex justify-end mt-4">
+              <button 
+                className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300 text-gray-700" 
+                onClick={() => {
+                  setShowStudentModal(false);
+                  setCurrentEvaluation(null);
+                }}
+              >
+                Đóng
+              </button>
             </div>
           </div>
         </div>

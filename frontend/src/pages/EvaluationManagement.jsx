@@ -25,7 +25,7 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
       try {
         setLoading(true);
         // Lấy tất cả section mà giáo viên này dạy
-        const sectionRes = await fetch(`${API_URL}/api/Section`);
+        const sectionRes = await fetch(`${API_URL}/api/Period`);
         const sectionData = await sectionRes.json();
         const mySections = sectionData.filter(sec => Number(sec.teacherid) === Number(user?.teacherid));
         setSections(mySections);
@@ -37,8 +37,8 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
         const evalRes = await fetch(`${API_URL}/api/Evaluation`);
         const evalData = await evalRes.json();
         // Chỉ lấy evaluation thuộc các section mà giáo viên này dạy
-        const mySectionIds = new Set(mySections.map(sec => Number(sec.sectionid)));
-        const filteredEvaluations = evalData.filter(ev => mySectionIds.has(Number(ev.sectionid)));
+        const mySectionIds = new Set(mySections.map(sec => Number(sec.periodid)));
+        const filteredEvaluations = evalData.filter(ev => mySectionIds.has(Number(ev.periodid)));
         setEvaluations(filteredEvaluations);
         const studentRes = await fetch(`${API_URL}/api/Student`);
         const studentData = await studentRes.json();
@@ -60,7 +60,7 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
   }, [user?.teacherid, location.pathname]);
 
   // Helper lấy thông tin section và lớp
-  const getSectionInfo = (sectionid) => sections.find(sec => sec.sectionid === sectionid);
+  const getSectionInfo = (periodid) => sections.find(sec => sec.periodid === periodid);
   const getClassName = (classid) => {
     const cls = classes.find(c => c.classid === classid);
     return cls ? cls.classname : `Lớp ${classid}`;
@@ -69,11 +69,11 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
   // Sort evaluations theo giờ tạo (createdat) mặc định, hoặc theo ngày section nếu bấm sort
   const sortedEvaluations = sortAsc
     ? [...evaluations].sort((a, b) => {
-        // sort tăng dần theo ngày sectiondate
-        const secA = getSectionInfo(a.sectionid);
-        const secB = getSectionInfo(b.sectionid);
-        const dateA = secA ? new Date(secA.sectiondate) : new Date(0);
-        const dateB = secB ? new Date(secB.sectiondate) : new Date(0);
+        // sort tăng dần theo ngày perioddate
+        const secA = getSectionInfo(a.periodid);
+        const secB = getSectionInfo(b.periodid);
+        const dateA = secA ? new Date(secA.perioddate) : new Date(0);
+        const dateB = secB ? new Date(secB.perioddate) : new Date(0);
         return dateA - dateB;
       })
     : [...evaluations].sort((a, b) => {
@@ -154,12 +154,12 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {paginatedEvaluations.map((ev, idx) => {
-                    const sec = getSectionInfo(ev.sectionid);
+                    const sec = getSectionInfo(ev.periodid);
                     return (
                       <tr key={ev.evaluationid}>
                         <td className="px-4 py-2 text-sm text-gray-500">{(currentPage - 1) * ITEMS_PER_PAGE + idx + 1}</td>
-                        <td className="px-4 py-2 text-sm text-gray-900">{sec ? sec.sectionno : '-'}</td>
-                        <td className="px-4 py-2 text-sm text-gray-900">{sec ? new Date(sec.sectiondate).toLocaleDateString('vi-VN') : '-'}</td>
+                        <td className="px-4 py-2 text-sm text-gray-900">{sec ? sec.periodno : '-'}</td>
+                        <td className="px-4 py-2 text-sm text-gray-900">{sec ? new Date(sec.perioddate).toLocaleDateString('vi-VN') : '-'}</td>
                         <td className="px-4 py-2 text-sm text-gray-900">{sec ? getClassName(sec.classid) : '-'}</td>
                         <td className="px-4 py-2 text-sm text-gray-900 max-w-xs whitespace-pre-line break-words">{ev.content}</td>
                         <td className="px-4 py-2 text-sm text-gray-900">{getDateTime(ev.createdat)}</td>

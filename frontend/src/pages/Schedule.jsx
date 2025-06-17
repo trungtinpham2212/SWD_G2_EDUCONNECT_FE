@@ -38,9 +38,13 @@ const Schedule = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) =>
     return { start, end };
   };
 
-  // Format date to YYYY-MM-DD
+  // Format date to YYYY-MM-DD (local, not UTC)
   const formatDate = (date) => {
-    return date.toISOString().split('T')[0];
+    // Lấy đúng ngày local, không bị lệch múi giờ
+    const year = date.getFullYear();
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const day = date.getDate().toString().padStart(2, '0');
+    return `${year}-${month}-${day}`;
   };
 
   // Fetch subjects and classes
@@ -63,16 +67,20 @@ const Schedule = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) =>
     const fetchSections = async () => {
       try {
         setLoading(true);
-        const response = await fetch(`${API_URL}/api/Section`);
+        const response = await fetch(`${API_URL}/api/Period`);
         if (!response.ok) {
           throw new Error('Failed to fetch schedule data');
         }
         const data = await response.json();
         // Filter sections for the current week and teacher
         const { start, end } = getWeekDates(currentWeek);
+        const startStr = formatDate(start);
+        const endStr = formatDate(end);
         const filteredSections = data.filter(section => {
-          const sectionDate = new Date(section.sectiondate);
-          const isInWeek = sectionDate >= start && sectionDate <= end;
+          // Lấy phần ngày từ perioddate (YYYY-MM-DD)
+          const sectionDateStr = section.perioddate.split('T')[0];
+          // So sánh chuỗi ngày thay vì đối tượng Date để tránh lệch múi giờ
+          const isInWeek = sectionDateStr >= startStr && sectionDateStr <= endStr;
           const isTeacherMatch = Number(section.teacherid) === Number(user?.teacherid);
           return isInWeek && isTeacherMatch;
         });
@@ -117,8 +125,8 @@ const Schedule = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) =>
     return cls ? cls.classname : `Lớp ${classid}`;
   };
 
-  const handleClassClick = (sectionid) => {
-    navigate(`/section/${sectionid}`);
+  const handleClassClick = (periodid) => {
+    navigate(`/section/${periodid}`);
   };
 
   const renderWeekHeader = () => {
@@ -150,17 +158,17 @@ const Schedule = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) =>
         {Array.from({ length: 7 }, (_, dayIndex) => {
           const date = new Date(start);
           date.setDate(start.getDate() + dayIndex);
+          const cellDateStr = formatDate(date); // YYYY-MM-DD
           // Find section for this time slot and day
           const section = sections.find(section => {
-            const sectionDateStr = section.sectiondate.split('T')[0];
-            const cellDateStr = formatDate(date);
-            return sectionDateStr === cellDateStr && Number(section.sectionno) === Number(slot.period);
+            const sectionDateStr = section.perioddate.split('T')[0];
+            return sectionDateStr === cellDateStr && Number(section.periodno) === Number(slot.period);
           });
           return (
             <div key={dayIndex} className="flex-1 min-w-[130px] p-2 border-r hover:bg-gray-50">
               {section && (
                 <div className="h-full p-2 rounded bg-blue-100 text-sm transition-colors hover:bg-blue-200">
-                  <div className="font-medium text-blue-900 cursor-pointer hover:underline" onClick={() => handleClassClick(section.sectionid)}>
+                  <div className="font-medium text-blue-900 cursor-pointer hover:underline" onClick={() => handleClassClick(section.periodid)}>
                     {getClassName(section.classid)}
                   </div>
                   <div className="text-xs text-gray-600">

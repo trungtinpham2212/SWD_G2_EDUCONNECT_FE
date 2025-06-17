@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import API_URL from '../config/api';
+import { toast, ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
 const ClassManagement = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) => {
   const [classes, setClasses] = useState([]);
@@ -13,41 +15,47 @@ const ClassManagement = ({ user, active, setActive, isSidebarOpen, setSidebarOpe
   const [modalStudents, setModalStudents] = useState([]);
   const [modalClassName, setModalClassName] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [createForm, setCreateForm] = useState({
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [classToDelete, setClassToDelete] = useState(null);
+  const [editingClass, setEditingClass] = useState(null);
+  const [form, setForm] = useState({
     classname: '',
     teacherhomeroomid: '',
     schoolyearid: ''
   });
   const [creating, setCreating] = useState(false);
+  const [updating, setUpdating] = useState(false);
+
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      const [classRes, teacherRes, userRes, yearRes, studentRes] = await Promise.all([
+        fetch(`${API_URL}/api/Class`),
+        fetch(`${API_URL}/api/Teacher`),
+        fetch(`${API_URL}/api/UserAccount/GetAllUserAccounts`),
+        fetch(`${API_URL}/api/SchoolYear`),
+        fetch(`${API_URL}/api/Student`)
+      ]);
+      const classData = await classRes.json();
+      const teacherData = await teacherRes.json();
+      const userData = await userRes.json();
+      const yearData = await yearRes.json();
+      const studentData = await studentRes.json();
+      setClasses(classData);
+      setTeachers(teacherData);
+      setUserAccounts(userData);
+      setSchoolYears(yearData);
+      setStudents(studentData);
+      setError(null);
+    } catch (err) {
+      setError('Không thể tải dữ liệu lớp học. Vui lòng thử lại sau.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        const [classRes, teacherRes, userRes, yearRes, studentRes] = await Promise.all([
-          fetch(`${API_URL}/api/Class`),
-          fetch(`${API_URL}/api/Teacher`),
-          fetch(`${API_URL}/api/UserAccount/GetAllUserAccounts`),
-          fetch(`${API_URL}/api/SchoolYear`),
-          fetch(`${API_URL}/api/Student`)
-        ]);
-        const classData = await classRes.json();
-        const teacherData = await teacherRes.json();
-        const userData = await userRes.json();
-        const yearData = await yearRes.json();
-        const studentData = await studentRes.json();
-        setClasses(classData);
-        setTeachers(teacherData);
-        setUserAccounts(userData);
-        setSchoolYears(yearData);
-        setStudents(studentData);
-        setError(null);
-      } catch (err) {
-        setError('Không thể tải dữ liệu lớp học. Vui lòng thử lại sau.');
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchData();
   }, []);
 
@@ -73,39 +81,122 @@ const ClassManagement = ({ user, active, setActive, isSidebarOpen, setSidebarOpe
     setShowStudentModal(true);
   };
 
+  const getAvailableTeachers = (schoolyearid) => {
+    if (!schoolyearid) return [];
+    // Lấy danh sách các giáo viên đã làm chủ nhiệm trong năm học này
+    const assignedTeachers = classes
+      .filter(c => c.schoolyearid === Number(schoolyearid))
+      .map(c => c.teacherhomeroomid);
+    // Lọc ra các giáo viên chưa được phân công
+    return teachers.filter(t => !assignedTeachers.includes(t.teacherid));
+  };
+
+  const isClassNameExists = (classname, schoolyearid, excludeClassId = null) => {
+    return classes.some(c => 
+      c.classname.toLowerCase() === classname.toLowerCase() && 
+      c.schoolyearid === Number(schoolyearid) &&
+      (!excludeClassId || c.classid !== excludeClassId)
+    );
+  };
+
   const handleCreateChange = (e) => {
     const { name, value } = e.target;
-    setCreateForm({ ...createForm, [name]: value });
+    // Nếu thay đổi năm học, reset giáo viên chủ nhiệm
+    if (name === 'schoolyearid') {
+      setForm({ ...form, [name]: value, teacherhomeroomid: '' });
+    } else {
+      setForm({ ...form, [name]: value });
+    }
   };
 
   const handleCreateClass = async (e) => {
     e.preventDefault();
+    if (isClassNameExists(form.classname, form.schoolyearid)) {
+      toast.error('Tên lớp này đã tồn tại trong năm học này');
+      return;
+    }
     setCreating(true);
     try {
-      // Tạo lớp mới
       const res = await fetch(`${API_URL}/api/Class`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          classname: createForm.classname,
-          teacherhomeroomid: createForm.teacherhomeroomid,
-          schoolyearid: createForm.schoolyearid
+          classname: form.classname,
+          teacherhomeroomid: form.teacherhomeroomid,
+          schoolyearid: form.schoolyearid
         })
       });
       if (!res.ok) throw new Error('Tạo lớp thất bại');
       setShowCreateModal(false);
-      setCreateForm({ classname: '', teacherhomeroomid: '', schoolyearid: '' });
+      setForm({ classname: '', teacherhomeroomid: '', schoolyearid: '' });
       await fetchData();
-      window.toast && window.toast.success('Tạo lớp thành công!');
+      toast.success('Tạo lớp thành công!');
     } catch (error) {
-      window.toast && window.toast.error('Có lỗi khi tạo lớp: ' + error.message);
+      toast.error('Có lỗi khi tạo lớp: ' + error.message);
     } finally {
       setCreating(false);
     }
   };
 
+  const handleEditClass = async (e) => {
+    e.preventDefault();
+    if (isClassNameExists(form.classname, form.schoolyearid, editingClass.classid)) {
+      toast.error('Tên lớp này đã tồn tại trong năm học này');
+      return;
+    }
+    setUpdating(true);
+    try {
+      const res = await fetch(`${API_URL}/api/Class/${editingClass.classid}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          classid: editingClass.classid,
+          classname: form.classname,
+          teacherhomeroomid: form.teacherhomeroomid,
+          schoolyearid: form.schoolyearid
+        })
+      });
+      if (!res.ok) throw new Error('Cập nhật lớp thất bại');
+      setShowEditModal(false);
+      setForm({ classname: '', teacherhomeroomid: '', schoolyearid: '' });
+      setEditingClass(null);
+      await fetchData();
+      toast.success('Cập nhật lớp thành công!');
+    } catch (error) {
+      toast.error('Có lỗi khi cập nhật lớp: ' + error.message);
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const handleDeleteClass = async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/Class/${classToDelete}`, {
+        method: 'DELETE'
+      });
+      if (!res.ok) throw new Error('Xóa lớp thất bại');
+      setShowDeleteModal(false);
+      setClassToDelete(null);
+      await fetchData();
+      toast.success('Xóa lớp thành công!');
+    } catch (error) {
+      toast.error('Có lỗi khi xóa lớp: ' + error.message);
+    }
+  };
+
+  const openEditModal = (cls) => {
+    setEditingClass(cls);
+    setForm({
+      classname: cls.classname,
+      teacherhomeroomid: cls.teacherhomeroomid,
+      schoolyearid: cls.schoolyearid
+    });
+    setShowEditModal(true);
+  };
+
   return (
     <div className="flex-1 p-6">
+      <ToastContainer />
       <h2 className="text-2xl font-semibold mb-6">Quản lý lớp học</h2>
       <div className="bg-white rounded-lg shadow-md p-6">
         <button className="mb-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700" onClick={() => setShowCreateModal(true)}>Thêm lớp học</button>
@@ -126,12 +217,13 @@ const ClassManagement = ({ user, active, setActive, isSidebarOpen, setSidebarOpe
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giáo viên chủ nhiệm</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Năm học</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Học sinh</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Thao tác</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {classes.length === 0 ? (
                   <tr>
-                    <td colSpan="5" className="px-4 py-4 text-center text-gray-500">Không có lớp nào</td>
+                    <td colSpan="6" className="px-4 py-4 text-center text-gray-500">Không có lớp nào</td>
                   </tr>
                 ) : (
                   classes.map((cls, idx) => {
@@ -152,6 +244,23 @@ const ClassManagement = ({ user, active, setActive, isSidebarOpen, setSidebarOpe
                             Xem danh sách ({classStudents.length})
                           </button>
                         </td>
+                        <td className="px-4 py-2 text-sm text-gray-900">
+                          <button
+                            className="px-3 py-1 bg-yellow-600 text-white rounded hover:bg-yellow-700 mr-2"
+                            onClick={() => openEditModal(cls)}
+                          >
+                            Sửa
+                          </button>
+                          <button
+                            className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700"
+                            onClick={() => {
+                              setClassToDelete(cls.classid);
+                              setShowDeleteModal(true);
+                            }}
+                          >
+                            Xóa
+                          </button>
+                        </td>
                       </tr>
                     );
                   })
@@ -161,6 +270,7 @@ const ClassManagement = ({ user, active, setActive, isSidebarOpen, setSidebarOpe
           </div>
         )}
       </div>
+
       {/* Modal danh sách học sinh */}
       {showStudentModal && (
         <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
@@ -199,6 +309,7 @@ const ClassManagement = ({ user, active, setActive, isSidebarOpen, setSidebarOpe
           </div>
         </div>
       )}
+
       {/* Modal tạo lớp học */}
       {showCreateModal && (
         <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
@@ -207,32 +318,148 @@ const ClassManagement = ({ user, active, setActive, isSidebarOpen, setSidebarOpe
             <form onSubmit={handleCreateClass}>
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700">Tên lớp</label>
-                <input type="text" name="classname" value={createForm.classname} onChange={handleCreateChange} required className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2" />
-              </div>
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700">Giáo viên chủ nhiệm</label>
-                <select name="teacherhomeroomid" value={createForm.teacherhomeroomid} onChange={handleCreateChange} required className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2">
-                  <option value="">-- Chọn giáo viên --</option>
-                  {teachers.map(t => {
-                    const user = userAccounts.find(u => u.userid === t.userid);
-                    return <option key={t.teacherid} value={t.teacherid}>{user ? user.fullname : 'GV ' + t.teacherid}</option>;
-                  })}
-                </select>
+                <input 
+                  type="text" 
+                  name="classname" 
+                  value={form.classname} 
+                  onChange={handleCreateChange} 
+                  required 
+                  className={`mt-1 block w-full border ${form.schoolyearid && isClassNameExists(form.classname, form.schoolyearid) ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm p-2`}
+                />
+                {form.schoolyearid && isClassNameExists(form.classname, form.schoolyearid) && (
+                  <p className="mt-1 text-sm text-red-600">Tên lớp này đã tồn tại trong năm học này</p>
+                )}
               </div>
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700">Năm học</label>
-                <select name="schoolyearid" value={createForm.schoolyearid} onChange={handleCreateChange} required className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2">
+                <select 
+                  name="schoolyearid" 
+                  value={form.schoolyearid} 
+                  onChange={handleCreateChange} 
+                  required 
+                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                >
                   <option value="">-- Chọn năm học --</option>
                   {schoolYears.map(y => (
                     <option key={y.schoolyearid} value={y.schoolyearid}>{y.year}</option>
                   ))}
                 </select>
               </div>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700">Giáo viên chủ nhiệm</label>
+                <select 
+                  name="teacherhomeroomid" 
+                  value={form.teacherhomeroomid} 
+                  onChange={handleCreateChange} 
+                  required 
+                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                  disabled={!form.schoolyearid}
+                >
+                  <option value="">-- Chọn giáo viên --</option>
+                  {getAvailableTeachers(form.schoolyearid).map(t => {
+                    const user = userAccounts.find(u => u.userid === t.userid);
+                    return <option key={t.teacherid} value={t.teacherid}>{user ? user.fullname : 'GV ' + t.teacherid}</option>;
+                  })}
+                </select>
+                {form.schoolyearid && getAvailableTeachers(form.schoolyearid).length === 0 && (
+                  <p className="mt-1 text-sm text-red-600">Không còn giáo viên nào có thể làm chủ nhiệm trong năm học này</p>
+                )}
+              </div>
               <div className="flex justify-end mt-6">
                 <button type="button" className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300 text-gray-700 mr-2" onClick={() => setShowCreateModal(false)}>Hủy</button>
-                <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700" disabled={creating}>{creating ? 'Đang lưu...' : 'Lưu'}</button>
+                <button 
+                  type="submit" 
+                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700" 
+                  disabled={creating || !form.schoolyearid || getAvailableTeachers(form.schoolyearid).length === 0}
+                >
+                  {creating ? 'Đang lưu...' : 'Lưu'}
+                </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal sửa lớp học */}
+      {showEditModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-lg">
+            <h3 className="text-xl font-bold mb-4">Sửa lớp học</h3>
+            <form onSubmit={handleEditClass}>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700">Tên lớp</label>
+                <input 
+                  type="text" 
+                  name="classname" 
+                  value={form.classname} 
+                  onChange={handleCreateChange} 
+                  required 
+                  className={`mt-1 block w-full border ${form.schoolyearid && isClassNameExists(form.classname, form.schoolyearid, editingClass.classid) ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm p-2`}
+                />
+                {form.schoolyearid && isClassNameExists(form.classname, form.schoolyearid, editingClass.classid) && (
+                  <p className="mt-1 text-sm text-red-600">Tên lớp này đã tồn tại trong năm học này</p>
+                )}
+              </div>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700">Năm học</label>
+                <select 
+                  name="schoolyearid" 
+                  value={form.schoolyearid} 
+                  onChange={handleCreateChange} 
+                  required 
+                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                >
+                  <option value="">-- Chọn năm học --</option>
+                  {schoolYears.map(y => (
+                    <option key={y.schoolyearid} value={y.schoolyearid}>{y.year}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700">Giáo viên chủ nhiệm</label>
+                <select 
+                  name="teacherhomeroomid" 
+                  value={form.teacherhomeroomid} 
+                  onChange={handleCreateChange} 
+                  required 
+                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                  disabled={!form.schoolyearid}
+                >
+                  <option value="">-- Chọn giáo viên --</option>
+                  {getAvailableTeachers(form.schoolyearid).map(t => {
+                    const user = userAccounts.find(u => u.userid === t.userid);
+                    return <option key={t.teacherid} value={t.teacherid}>{user ? user.fullname : 'GV ' + t.teacherid}</option>;
+                  })}
+                </select>
+                {form.schoolyearid && getAvailableTeachers(form.schoolyearid).length === 0 && (
+                  <p className="mt-1 text-sm text-red-600">Không còn giáo viên nào có thể làm chủ nhiệm trong năm học này</p>
+                )}
+              </div>
+              <div className="flex justify-end mt-6">
+                <button type="button" className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300 text-gray-700 mr-2" onClick={() => setShowEditModal(false)}>Hủy</button>
+                <button 
+                  type="submit" 
+                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700" 
+                  disabled={updating || !form.schoolyearid || getAvailableTeachers(form.schoolyearid).length === 0}
+                >
+                  {updating ? 'Đang lưu...' : 'Lưu'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal xác nhận xóa */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md">
+            <h3 className="text-lg font-semibold mb-4">Xác nhận xóa</h3>
+            <p>Bạn có chắc chắn muốn xóa lớp học này không?</p>
+            <div className="flex justify-end mt-6 gap-2">
+              <button className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300 text-gray-700" onClick={() => setShowDeleteModal(false)}>Hủy</button>
+              <button className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700" onClick={handleDeleteClass}>Xóa</button>
+            </div>
           </div>
         </div>
       )}

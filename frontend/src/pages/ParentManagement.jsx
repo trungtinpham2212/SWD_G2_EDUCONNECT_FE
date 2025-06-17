@@ -13,6 +13,8 @@ const ParentManagement = ({ user, active, setActive, isSidebarOpen, setSidebarOp
   const [error, setError] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [showModal, setShowModal] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [form, setForm] = useState({
     username: '',
     password: '',
@@ -107,6 +109,7 @@ const ParentManagement = ({ user, active, setActive, isSidebarOpen, setSidebarOp
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setIsSubmitting(true);
     try {
       if (editingUser) {
         // Sửa tài khoản
@@ -116,12 +119,12 @@ const ParentManagement = ({ user, active, setActive, isSidebarOpen, setSidebarOp
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            Password: form.password,
-            Fullname: form.fullname,
-            Email: form.email,
-            PhoneNumber: form.phoneNumber,
-            Address: form.address,
-            RoleId: form.role
+            password: form.password,
+            fullname: form.fullname,
+            email: form.email,
+            phoneNumber: form.phoneNumber,
+            address: form.address,
+            roleId: form.role
           })
         });
         const text = await response.text();
@@ -140,7 +143,15 @@ const ParentManagement = ({ user, active, setActive, isSidebarOpen, setSidebarOp
           headers: {
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify(form)
+          body: JSON.stringify({
+            username: form.username,
+            password: form.password,
+            fullname: form.fullname,
+            email: form.email,
+            phoneNumber: form.phoneNumber,
+            address: form.address,
+            roleId: form.role
+          })
         });
         const text = await response.text();
         const normalized = text.replace(/"/g, '').trim();
@@ -154,6 +165,8 @@ const ParentManagement = ({ user, active, setActive, isSidebarOpen, setSidebarOp
       }
     } catch (error) {
       toast.error('Có lỗi xảy ra khi lưu phụ huynh.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -163,6 +176,7 @@ const ParentManagement = ({ user, active, setActive, isSidebarOpen, setSidebarOp
   };
 
   const confirmDelete = async () => {
+    setIsDeleting(true);
     try {
       const response = await fetch(`${API_URL}/api/UserAccount/${userToDelete}`, {
         method: 'DELETE'
@@ -179,6 +193,7 @@ const ParentManagement = ({ user, active, setActive, isSidebarOpen, setSidebarOp
     } finally {
       setShowDeleteModal(false);
       setUserToDelete(null);
+      setIsDeleting(false);
     }
   };
 
@@ -306,8 +321,21 @@ const ParentManagement = ({ user, active, setActive, isSidebarOpen, setSidebarOp
                 <input type="text" name="address" value={form.address} onChange={handleChange} required className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2" />
               </div>
               <div className="flex justify-end mt-6">
-                <button type="button" className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300 text-gray-700 mr-2" onClick={() => setShowModal(false)}>Hủy</button>
-                <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Lưu</button>
+                <button 
+                  type="button" 
+                  className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300 text-gray-700 mr-2" 
+                  onClick={() => setShowModal(false)}
+                  disabled={isSubmitting}
+                >
+                  Hủy
+                </button>
+                <button 
+                  type="submit" 
+                  className={`px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? 'Đang xử lý...' : 'Lưu'}
+                </button>
               </div>
             </form>
           </div>
@@ -321,8 +349,20 @@ const ParentManagement = ({ user, active, setActive, isSidebarOpen, setSidebarOp
             <h3 className="text-lg font-semibold mb-4">Xác nhận xóa phụ huynh</h3>
             <p>Bạn có chắc chắn muốn xóa phụ huynh này không?</p>
             <div className="flex justify-end mt-6 gap-2">
-              <button className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300 text-gray-700" onClick={() => setShowDeleteModal(false)}>Hủy</button>
-              <button className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700" onClick={confirmDelete}>Xóa</button>
+              <button 
+                className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300 text-gray-700" 
+                onClick={() => setShowDeleteModal(false)}
+                disabled={isDeleting}
+              >
+                Hủy
+              </button>
+              <button 
+                className={`px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 ${isDeleting ? 'opacity-50 cursor-not-allowed' : ''}`} 
+                onClick={confirmDelete}
+                disabled={isDeleting}
+              >
+                {isDeleting ? 'Đang xóa...' : 'Xóa'}
+              </button>
             </div>
           </div>
         </div>
