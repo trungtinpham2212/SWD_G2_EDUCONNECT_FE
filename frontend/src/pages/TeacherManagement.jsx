@@ -181,18 +181,12 @@ const TeacherManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
       try {
         const teacher = teachers.find(t => t.userid === editingUser.userid);
         if (teacher && form.subjectid && form.subjectid !== teacher.subjectid) {
-          const response = await fetch(`${API_URL}/api/Teacher/${teacher.teacherid}`, {
+          const response = await fetch(`${API_URL}/api/Teacher`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              teacherid: teacher.teacherid,
-              userid: teacher.userid,
-              subjectid: form.subjectid,
-              classes: [],
-              reports: [],
-              sections: [],
-              subject: null,
-              user: null
+              teacherId: teacher.teacherid,
+              subjectId: Number(form.subjectid)
             })
           });
           if (response.ok) {
