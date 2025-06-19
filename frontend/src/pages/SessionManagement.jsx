@@ -533,6 +533,7 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
 
     // Kiểm tra đánh giá cho tiết học trong quá khứ
     const hasEvaluation = isPast ? getEvaluationsForSection(section.periodid).length > 0 : null;
+    const evaluationCount = isPast ? getEvaluationsForSection(section.periodid).length : 0;
 
     return (
       <div 
@@ -547,7 +548,7 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
         </div>
         {isPast && (
           <div className="text-xs text-gray-500 mt-1">
-            {hasEvaluation ? 'Có đánh giá cho tiết học này' : 'Không có đánh giá cho tiết học này'}
+            {hasEvaluation ? `Có ${evaluationCount} đánh giá cho tiết học này` : 'Không có đánh giá cho tiết học này'}
           </div>
         )}
       </div>
