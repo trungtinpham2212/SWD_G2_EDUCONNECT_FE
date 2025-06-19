@@ -39,7 +39,8 @@ const Login = ({ setUser }) => {
           userName: data.userName,
           email: data.email,
           roleId: data.roleId,
-          teacherid: data.teacherid
+          userId: data.userId,
+          teacherId: data.teacherId
         };
         localStorage.setItem('user', JSON.stringify(userData));
         setUser(userData);

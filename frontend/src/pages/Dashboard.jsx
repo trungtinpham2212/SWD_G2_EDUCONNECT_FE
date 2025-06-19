@@ -9,7 +9,7 @@ const Dashboard = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) =
   const [classes, setClasses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [currentWeek, setCurrentWeek] = useState(new Date());
+  const [currentWeek, setCurrentWeek] = useState(new Date('2024-12-02'));
 
   // Lấy thông tin user từ localStorage nếu chưa có
   const [parent, setParent] = useState(user || null);
@@ -24,19 +24,25 @@ const Dashboard = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) =
     }
   }, [parent]);
 
-  // Lấy danh sách con
+  // Lấy danh sách con sử dụng API mới
   useEffect(() => {
-    if (!parent) return;
+    if (!parent || !parent.userId || parent.roleId !== 3) return;
     
     const fetchChildren = async () => {
       try {
         setLoading(true);
-        console.log('Fetching children for parent:', parent.userId);
-        const res = await fetch(`${API_URL}/api/Student/GetStudentsByParentId/${parent.userId}`);
-        const myChildren = await res.json();
-        console.log('Children data:', myChildren);
+        console.log('Đang lấy danh sách học sinh cho phụ huynh:', parent.userId);
         
-        if (Array.isArray(myChildren) && myChildren.length > 0) {
+        const res = await fetch(`${API_URL}/api/Student/parent/${parent.userId}`);
+        if (!res.ok) {
+          throw new Error('Không thể kết nối với server');
+        }
+        const myChildren = await res.json();
+        
+        console.log('Số con của phụ huynh:', myChildren.length);
+        console.log('Danh sách con:', myChildren);
+
+        if (myChildren.length > 0) {
           setChildren(myChildren);
           setSelectedChildId(myChildren[0].studentid);
         } else {
@@ -54,28 +60,42 @@ const Dashboard = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) =
 
   // Lấy periods, subjects, classes khi có selectedChildId
   useEffect(() => {
-    if (!selectedChildId) return;
+    if (!selectedChildId || !parent || parent.roleId !== 3) return;
     
     const fetchData = async () => {
       try {
         setLoading(true);
         console.log('Fetching schedule data for child:', selectedChildId);
         
+        // Lấy thông tin học sinh được chọn
+        const selectedStudent = children.find(c => c.studentid === selectedChildId);
+        if (!selectedStudent) {
+          throw new Error('Không tìm thấy thông tin học sinh');
+        }
+
+        // Lấy tất cả dữ liệu cần thiết
         const [periodRes, subjectRes, classRes] = await Promise.all([
           fetch(`${API_URL}/api/Period/GetPeriodsByStudentId/${selectedChildId}`),
           fetch(`${API_URL}/api/Subject`),
           fetch(`${API_URL}/api/Class`)
         ]);
 
-        const periodsData = await periodRes.json();
-        const subjectsData = await subjectRes.json();
-        const classesData = await classRes.json();
+        if (!periodRes.ok || !subjectRes.ok || !classRes.ok) {
+          throw new Error('Một số API không phản hồi');
+        }
 
-        console.log('Schedule data:', {
-          periods: periodsData,
-          subjects: subjectsData,
-          classes: classesData
-        });
+        const [periodsData, subjectsData, classesData] = await Promise.all([
+          periodRes.json(),
+          subjectRes.json(),
+          classRes.json()
+        ]);
+
+        // Lọc periods theo lớp của học sinh được chọn
+        const filteredPeriods = periodsData.filter(p => p.classid === selectedStudent.classid);
+
+        console.log('Số tiết học tìm thấy:', filteredPeriods.length);
+        console.log('Số môn học:', subjectsData.length);
+        console.log('Số lớp:', classesData.length);
 
         setPeriods(periodsData);
         setSubjects(subjectsData);
@@ -88,13 +108,14 @@ const Dashboard = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) =
       }
     };
     fetchData();
-  }, [selectedChildId]);
+  }, [selectedChildId, children, parent]);
 
   // Helper lấy tên môn học và tên lớp
   const getSubjectName = (subjectid) => {
     const subject = subjects.find(s => s.subjectid === subjectid);
     return subject ? subject.subjectname : `Môn ${subjectid}`;
   };
+  
   const getClassName = (classid) => {
     const cls = classes.find(c => c.classid === classid);
     return cls ? cls.classname : `Lớp ${classid}`;
@@ -112,17 +133,20 @@ const Dashboard = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) =
     end.setHours(23, 59, 59, 999);
     return { start, end };
   };
+  
   const formatDate = (date) => {
     const year = date.getFullYear();
     const month = (date.getMonth() + 1).toString().padStart(2, '0');
     const day = date.getDate().toString().padStart(2, '0');
     return `${year}-${month}-${day}`;
   };
+  
   const formatDateVN = (date) => {
     const day = date.getDate().toString().padStart(2, '0');
     const month = (date.getMonth() + 1).toString().padStart(2, '0');
     return `${day}/${month}`;
   };
+  
   const getDayName = (date) => {
     const days = ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'];
     return days[date.getDay()];
@@ -198,6 +222,54 @@ const Dashboard = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) =
     setCurrentWeek(newDate);
   };
 
+  if (parent && parent.roleId === 1) {
+    return (
+      <div className="flex-1 p-6">
+        <h2 className="text-2xl font-semibold mb-6">Xin chào {parent.userName}, chúc bạn một ngày tốt lành!</h2>
+        <div className="bg-white rounded-lg shadow-md p-6">
+          <h3 className="text-xl font-semibold text-blue-600 mb-4">Đây là Dashboard Admin</h3>
+          <p className="text-gray-600">
+            Chào mừng bạn đến với hệ thống quản lý giáo dục EduConnect - Trang quản trị
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (parent && parent.roleId === 2) {
+    return (
+      <div className="flex-1 p-6">
+        <h2 className="text-2xl font-semibold mb-6">Xin chào {parent.userName}, chúc bạn một ngày tốt lành!</h2>
+        <div className="bg-white rounded-lg shadow-md p-6">
+          <h3 className="text-xl font-semibold text-green-600 mb-4">Đây là Dashboard Teacher</h3>
+          <p className="text-gray-600">
+            Chào mừng bạn đến với hệ thống quản lý giáo dục EduConnect - Trang giáo viên
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="flex-1 p-6">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-lg text-gray-600">Đang tải dữ liệu...</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex-1 p-6">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="text-red-800">{error}</div>
+        </div>
+      </div>
+    );
+  }
+
   if (parent && parent.roleId === 3) {
     return (
       <div className="flex-1 p-6">
@@ -211,7 +283,9 @@ const Dashboard = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) =
               onChange={e => setSelectedChildId(Number(e.target.value))}
             >
               {children.map(child => (
-                <option key={child.studentid} value={child.studentid}>{child.name} - {getClassName(child.classid)}</option>
+                <option key={child.studentid} value={child.studentid}>
+                  {child.name} - {getClassName(child.classid)}
+                </option>
               ))}
             </select>
           </div>
