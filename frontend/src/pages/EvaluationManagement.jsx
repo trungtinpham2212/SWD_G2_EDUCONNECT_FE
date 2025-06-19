@@ -1,127 +1,239 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import API_URL from '../config/api';
 import { useLocation } from 'react-router-dom';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
-const ITEMS_PER_PAGE = 20;
+const ITEMS_PER_PAGE = 15;
 
 const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) => {
   const [evaluations, setEvaluations] = useState([]);
   const [sections, setSections] = useState([]);
   const [classes, setClasses] = useState([]);
+  const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const [sortAsc, setSortAsc] = useState(false); // sort theo ngày
+  const [sortAsc, setSortAsc] = useState(false);
   const location = useLocation();
-  const [students, setStudents] = useState([]);
-  const [userAccounts, setUserAccounts] = useState([]);
   const [showStudentModal, setShowStudentModal] = useState(false);
   const [modalStudents, setModalStudents] = useState([]);
+  const [currentEvaluation, setCurrentEvaluation] = useState(null);
+
+  // Thêm state cho filter
+  const [selectedClass, setSelectedClass] = useState('all');
+  const [selectedType, setSelectedType] = useState('all'); // 'all', 'positive', 'negative'
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
+        
+        const headers = {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        };
+
         // Lấy tất cả section mà giáo viên này dạy
-        const sectionRes = await fetch(`${API_URL}/api/Period`);
-        const sectionData = await sectionRes.json();
+        const [sectionRes, classRes, evalRes, activityRes] = await Promise.all([
+          fetch(`${API_URL}/api/Period`, { headers }),
+          fetch(`${API_URL}/api/Class`, { headers }),
+          fetch(`${API_URL}/api/Evaluation`, { headers }),
+          fetch(`${API_URL}/api/Activity`, { headers })
+        ]);
+
+        if (!sectionRes.ok || !classRes.ok || !evalRes.ok || !activityRes.ok) {
+          throw new Error('Một hoặc nhiều API call thất bại');
+        }
+
+        const [sectionData, classData, evalData, activities] = await Promise.all([
+          sectionRes.json(),
+          classRes.json(),
+          evalRes.json(),
+          activityRes.json()
+        ]);
+
+        // Lọc section của giáo viên này
         const mySections = sectionData.filter(sec => Number(sec.teacherid) === Number(user?.teacherid));
         setSections(mySections);
-        // Lấy tất cả lớp để map tên lớp
-        const classRes = await fetch(`${API_URL}/api/Class`);
-        const classData = await classRes.json();
         setClasses(classData);
-        // Lấy tất cả evaluation
-        const evalRes = await fetch(`${API_URL}/api/Evaluation`);
-        const evalData = await evalRes.json();
+        setActivities(activities);
+
         // Chỉ lấy evaluation thuộc các section mà giáo viên này dạy
         const mySectionIds = new Set(mySections.map(sec => Number(sec.periodid)));
         const filteredEvaluations = evalData.filter(ev => mySectionIds.has(Number(ev.periodid)));
         setEvaluations(filteredEvaluations);
-        const studentRes = await fetch(`${API_URL}/api/Student`);
-        const studentData = await studentRes.json();
-        setStudents(studentData);
-        const userRes = await fetch(`${API_URL}/api/UserAccount/GetAllUserAccounts`);
-        const userData = await userRes.json();
-        setUserAccounts(userData);
+
         setError(null);
       } catch (err) {
+        console.error('Error in fetchData:', err);
         setError('Không thể tải dữ liệu đánh giá. Vui lòng thử lại sau.');
       } finally {
         setLoading(false);
       }
     };
+
     if (user?.teacherid) {
       fetchData();
     }
-    // eslint-disable-next-line
   }, [user?.teacherid, location.pathname]);
 
-  // Helper lấy thông tin section và lớp
-  const getSectionInfo = (periodid) => sections.find(sec => sec.periodid === periodid);
+  // Cache danh sách lớp có đánh giá
+  const classesWithEvaluations = useMemo(() => {
+    const classIds = new Set();
+    evaluations.forEach(ev => {
+      const section = sections.find(s => s.periodid === ev.periodid);
+      if (section) {
+        classIds.add(section.classid);
+      }
+    });
+    return Array.from(classIds).map(id => {
+      const cls = classes.find(c => c.classid === id);
+      return {
+        id: cls?.classid,
+        name: cls ? cls.classname : `Lớp ${id}`
+      };
+    });
+  }, [evaluations, sections, classes]);
+
+  const getSectionInfo = (periodid) => sections.find(sec => Number(sec.periodid) === Number(periodid));
   const getClassName = (classid) => {
-    const cls = classes.find(c => c.classid === classid);
+    const cls = classes.find(c => Number(c.classid) === Number(classid));
     return cls ? cls.classname : `Lớp ${classid}`;
   };
 
-  // Sort evaluations theo giờ tạo (createdat) mặc định, hoặc theo ngày section nếu bấm sort
-  const sortedEvaluations = sortAsc
-    ? [...evaluations].sort((a, b) => {
-        // sort tăng dần theo ngày perioddate
-        const secA = getSectionInfo(a.periodid);
-        const secB = getSectionInfo(b.periodid);
-        const dateA = secA ? new Date(secA.perioddate) : new Date(0);
-        const dateB = secB ? new Date(secB.perioddate) : new Date(0);
-        return dateA - dateB;
-      })
-    : [...evaluations].sort((a, b) => {
-        // sort giảm dần theo giờ tạo (createdat)
-        const dateA = new Date(a.createdat);
-        const dateB = new Date(b.createdat);
-        return dateB - dateA;
-      });
-
-  // Pagination
-  const totalPages = Math.ceil(sortedEvaluations.length / ITEMS_PER_PAGE);
-  const paginatedEvaluations = sortedEvaluations.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
-
-  // Helper lấy ngày và giờ từ datetime
   const getDateTime = (datetime) => {
     if (!datetime) return '-';
     const d = new Date(datetime);
     return d.toLocaleDateString('vi-VN') + ' ' + d.toLocaleTimeString('vi-VN', { hour12: false });
   };
 
-  // Handler sort
-  const handleSortDate = () => {
-    setSortAsc((prev) => !prev);
-    setCurrentPage(1);
-  };
-
-  // Handler chuyển trang
-  const handlePageChange = (page) => {
-    if (page >= 1 && page <= totalPages) setCurrentPage(page);
-  };
-
-  const getStudentNames = (evaluation) => {
-    if (!evaluation.students || !Array.isArray(evaluation.students)) return [];
-    return evaluation.students.map(evStu => {
-      const stu = students.find(s => s.studentid === evStu.studentid);
-      return stu ? stu.name : `HS ${evStu.studentid}`;
-    });
-  };
-
   const handleShowStudents = (evaluation) => {
-    setModalStudents(getStudentNames(evaluation));
+    if (evaluation?.students?.length > 0) {
+      setModalStudents(evaluation.students);
+    } else {
+      setModalStudents([]);
+    }
+    setCurrentEvaluation(evaluation);
     setShowStudentModal(true);
+  };
+
+  const getStudentPreview = (evaluation) => {
+    if (!evaluation?.students?.length) return '(0)';
+    
+    // Tìm lớp của học sinh đầu tiên
+    const firstStudent = evaluation.students[0];
+    if (!firstStudent?.classid) return `(${evaluation.students.length})`;
+
+    // Lấy danh sách học sinh trong lớp đó
+    const classStudents = evaluations
+      .filter(e => e.students?.length > 0 && e.students[0].classid === firstStudent.classid)
+      .flatMap(e => e.students);
+    
+    // Lấy số lượng học sinh duy nhất trong lớp
+    const uniqueStudents = new Set(classStudents.map(s => s.studentid));
+    const classSize = uniqueStudents.size;
+    
+    // Nếu số học sinh trong đánh giá bằng sĩ số lớp
+    if (evaluation.students.length === classSize) {
+      return 'cả lớp';
+    }
+    
+    return `${evaluation.students.length} học sinh`;
+  };
+
+  // Lọc và sắp xếp evaluations
+  const filteredAndSortedEvaluations = useMemo(() => {
+    let filtered = [...evaluations];
+
+    // Lọc theo lớp
+    if (selectedClass !== 'all') {
+      filtered = filtered.filter(ev => {
+        const section = sections.find(s => s.periodid === ev.periodid);
+        return section && Number(section.classid) === Number(selectedClass);
+      });
+    }
+
+    // Lọc theo loại đánh giá dựa trên activity.isnegative
+    if (selectedType !== 'all') {
+      filtered = filtered.filter(ev => {
+        const activity = activities.find(act => act.activityid === ev.activityid);
+        if (!activity) return false;
+        return selectedType === 'negative' ? activity.isnegative : !activity.isnegative;
+      });
+    }
+
+    // Sắp xếp
+    return filtered.sort((a, b) => {
+      if (sortAsc) {
+        const secA = getSectionInfo(a.periodid);
+        const secB = getSectionInfo(b.periodid);
+        const dateA = secA ? new Date(secA.perioddate) : new Date(0);
+        const dateB = secB ? new Date(secB.perioddate) : new Date(0);
+        return dateA - dateB;
+      } else {
+        const dateA = new Date(a.createdat);
+        const dateB = new Date(b.createdat);
+        return dateB - dateA;
+      }
+    });
+  }, [evaluations, sections, selectedClass, selectedType, activities, sortAsc]);
+
+  const handleSortDate = () => {
+    setSortAsc(!sortAsc);
+    setCurrentPage(1); // Reset về trang 1 khi đổi sort
+  };
+
+  const totalPages = Math.ceil(filteredAndSortedEvaluations.length / ITEMS_PER_PAGE);
+  const paginatedEvaluations = filteredAndSortedEvaluations.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
+  );
+
+  // Reset trang khi thay đổi filter
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedClass, selectedType]);
+
+  // Thêm hàm helper để lấy loại đánh giá
+  const getEvaluationType = (evaluation) => {
+    const activity = activities.find(act => act.activityid === evaluation.activityid);
+    return activity?.isnegative ? 'negative' : 'positive';
   };
 
   return (
     <div className="flex-1 p-6">
       <h2 className="text-2xl font-semibold mb-6">Quản lý đánh giá</h2>
       <div className="bg-white rounded-lg shadow-md p-6">
+        {/* Thêm phần filter */}
+        <div className="mb-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Lớp:</label>
+            <select
+              value={selectedClass}
+              onChange={(e) => setSelectedClass(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="all">Tất cả các lớp</option>
+              {classesWithEvaluations.map(cls => (
+                <option key={cls.id} value={cls.id}>{cls.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Loại đánh giá:</label>
+            <select
+              value={selectedType}
+              onChange={(e) => setSelectedType(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="all">Tất cả</option>
+              <option value="positive">Tích cực</option>
+              <option value="negative">Tiêu cực</option>
+            </select>
+          </div>
+        </div>
+
         {loading ? (
           <div className="text-center py-8">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
@@ -129,8 +241,8 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
           </div>
         ) : error ? (
           <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-600">{error}</div>
-        ) : evaluations.length === 0 ? (
-          <div className="text-gray-500">Không có đánh giá nào cho các tiết bạn dạy.</div>
+        ) : filteredAndSortedEvaluations.length === 0 ? (
+          <div className="text-gray-500">Không có đánh giá nào phù hợp với bộ lọc.</div>
         ) : (
           <>
             <div className="overflow-x-auto">
@@ -148,6 +260,7 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
                     </th>
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Lớp</th>
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nội dung đánh giá</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Loại</th>
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giờ tạo</th>
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Học sinh</th>
                   </tr>
@@ -162,10 +275,22 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
                         <td className="px-4 py-2 text-sm text-gray-900">{sec ? new Date(sec.perioddate).toLocaleDateString('vi-VN') : '-'}</td>
                         <td className="px-4 py-2 text-sm text-gray-900">{sec ? getClassName(sec.classid) : '-'}</td>
                         <td className="px-4 py-2 text-sm text-gray-900 max-w-xs whitespace-pre-line break-words">{ev.content}</td>
+                        <td className="px-4 py-2 text-sm">
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                            getEvaluationType(ev) === 'negative' 
+                              ? 'bg-red-100 text-red-800' 
+                              : 'bg-green-100 text-green-800'
+                          }`}>
+                            {getEvaluationType(ev) === 'negative' ? 'Tiêu cực' : 'Tích cực'}
+                          </span>
+                        </td>
                         <td className="px-4 py-2 text-sm text-gray-900">{getDateTime(ev.createdat)}</td>
                         <td className="px-4 py-2 text-sm text-gray-900">
-                          <button className="px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600" onClick={() => handleShowStudents(ev)}>
-                            Xem học sinh
+                          <button 
+                            className="px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
+                            onClick={() => handleShowStudents(ev)}
+                          >
+                            Xem {getStudentPreview(ev)} 
                           </button>
                         </td>
                       </tr>
@@ -174,49 +299,82 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
                 </tbody>
               </table>
             </div>
-            {/* Pagination */}
-            <div className="flex justify-center items-center mt-6 gap-2">
-              <button
-                className="px-3 py-1 rounded border bg-gray-100 hover:bg-gray-200"
-                onClick={() => handlePageChange(currentPage - 1)}
-                disabled={currentPage === 1}
-              >
-                &lt;
-              </button>
-              {Array.from({ length: totalPages }, (_, i) => (
+            <div className="flex justify-between items-center mt-6">
+              <div className="text-sm text-gray-500">
+                Hiển thị {paginatedEvaluations.length} / {filteredAndSortedEvaluations.length} đánh giá
+              </div>
+              <div className="flex items-center gap-2">
                 <button
-                  key={i}
-                  className={`px-3 py-1 rounded border ${currentPage === i + 1 ? 'bg-blue-500 text-white' : 'bg-gray-100 hover:bg-gray-200'}`}
-                  onClick={() => handlePageChange(i + 1)}
+                  className="px-3 py-1 rounded border bg-gray-100 hover:bg-gray-200"
+                  onClick={() => setCurrentPage(currentPage - 1)}
+                  disabled={currentPage === 1}
                 >
-                  {i + 1}
+                  &lt;
                 </button>
-              ))}
-              <button
-                className="px-3 py-1 rounded border bg-gray-100 hover:bg-gray-200"
-                onClick={() => handlePageChange(currentPage + 1)}
-                disabled={currentPage === totalPages}
-              >
-                &gt;
-              </button>
+                {Array.from({ length: totalPages }, (_, i) => (
+                  <button
+                    key={i}
+                    className={`px-3 py-1 rounded border ${currentPage === i + 1 ? 'bg-blue-500 text-white' : 'bg-gray-100 hover:bg-gray-200'}`}
+                    onClick={() => setCurrentPage(i + 1)}
+                  >
+                    {i + 1}
+                  </button>
+                ))}
+                <button
+                  className="px-3 py-1 rounded border bg-gray-100 hover:bg-gray-200"
+                  onClick={() => setCurrentPage(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                >
+                  &gt;
+                </button>
+              </div>
             </div>
           </>
         )}
       </div>
       {/* Modal danh sách học sinh */}
-      {showStudentModal && (
+      {showStudentModal && currentEvaluation && (
         <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md">
-            <h3 className="text-lg font-semibold mb-4">Danh sách học sinh trong đánh giá</h3>
-            <ul className="list-disc ml-4 mb-4">
+            <h3 className="text-lg font-semibold mb-4">
+              Danh sách {getStudentPreview(currentEvaluation)} trong đánh giá
+            </h3>
+            <div className="max-h-96 overflow-y-auto">
               {modalStudents.length === 0 ? (
-                <li>Không có học sinh</li>
+                <p className="text-gray-500">Không có học sinh</p>
               ) : (
-                modalStudents.map((name, idx) => <li key={idx}>{name}</li>)
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">STT</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Họ và tên</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ngày sinh</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {modalStudents.map((student, idx) => (
+                      <tr key={student.studentid}>
+                        <td className="px-4 py-2 text-sm text-gray-500">{idx + 1}</td>
+                        <td className="px-4 py-2 text-sm font-medium text-gray-900">{student.name}</td>
+                        <td className="px-4 py-2 text-sm text-gray-900">
+                          {student.dateofbirth ? new Date(student.dateofbirth).toLocaleDateString('vi-VN') : '-'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               )}
-            </ul>
-            <div className="flex justify-end">
-              <button className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300 text-gray-700" onClick={() => setShowStudentModal(false)}>Đóng</button>
+            </div>
+            <div className="flex justify-end mt-4">
+              <button 
+                className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300 text-gray-700" 
+                onClick={() => {
+                  setShowStudentModal(false);
+                  setCurrentEvaluation(null);
+                }}
+              >
+                Đóng
+              </button>
             </div>
           </div>
         </div>

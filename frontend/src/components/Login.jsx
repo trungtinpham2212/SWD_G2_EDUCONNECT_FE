@@ -125,7 +125,7 @@ const Login = ({ setUser }) => {
               {isLoading ? (
                 <FaSpinner className="h-5 w-5 text-blue-300 animate-spin" />
               ) : (
-                <FaSignInAlt className="h-5 w-5 text-blue-500 group-hover:text-blue-400" />
+              <FaSignInAlt className="h-5 w-5 text-blue-500 group-hover:text-blue-400" />
               )}
             </span>
             <span className="ml-3">{isLoading ? 'Đang đăng nhập...' : 'Đăng nhập'}</span>

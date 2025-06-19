@@ -59,6 +59,31 @@ const SubjectManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // Kiểm tra tên môn học trống
+    if (!form.subjectname.trim()) {
+      toast.error('Tên môn học không được để trống');
+      return;
+    }
+
+    // Chuẩn hóa tên môn học (loại bỏ khoảng trắng thừa và chuyển về chữ thường)
+    const normalizedNewName = form.subjectname.trim().toLowerCase();
+
+    // Kiểm tra trùng tên với các môn học khác
+    const isDuplicate = subjects.some(subject => {
+      // Bỏ qua môn học đang được sửa
+      if (editingSubject && subject.subjectid === editingSubject.subjectid) {
+        return false;
+      }
+      const normalizedExistingName = subject.subjectname.trim().toLowerCase();
+      return normalizedExistingName === normalizedNewName;
+    });
+
+    if (isDuplicate) {
+      toast.error('Tên môn học này đã tồn tại');
+      return;
+    }
+
     try {
       if (editingSubject) {
         const response = await fetch(`${API_URL}/api/Subject/${editingSubject.subjectid}`, {

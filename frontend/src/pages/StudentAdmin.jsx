@@ -12,9 +12,11 @@ const StudentAdmin = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
+    const [selectedClass, setSelectedClass] = useState('all');
     const [parentAccounts, setParentAccounts] = useState([]);
     const [currentPage, setCurrentPage] = useState(1);
     const [showModal, setShowModal] = useState(false);
+    const [sortByClass, setSortByClass] = useState(true);
     const [form, setForm] = useState({
         name: '',
         dateofbirth: '',
@@ -62,9 +64,23 @@ const StudentAdmin = () => {
         return cls ? cls.classname : `Lớp ${classid}`;
     };
 
-    const filteredStudents = students.filter(student =>
-        student.name.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    const filteredStudents = students
+        .filter(student =>
+            student.name.toLowerCase().includes(searchTerm.toLowerCase()) &&
+            (selectedClass === 'all' || student.classid === Number(selectedClass))
+        )
+        .sort((a, b) => {
+            if (sortByClass) {
+                const classA = getClassName(a.classid);
+                const classB = getClassName(b.classid);
+                if (classA === classB) {
+                    // Nếu cùng lớp thì sort theo tên
+                    return a.name.localeCompare(b.name, 'vi');
+                }
+                return classA.localeCompare(classB, 'vi');
+            }
+            return 0;
+        });
 
     const totalPages = Math.ceil(filteredStudents.length / ITEMS_PER_PAGE);
     const paginatedStudents = filteredStudents.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
@@ -171,7 +187,10 @@ const StudentAdmin = () => {
                             type="text"
                             placeholder="Tìm kiếm học sinh..."
                             value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
+                            onChange={(e) => {
+                                setSearchTerm(e.target.value);
+                                setCurrentPage(1);
+                            }}
                             className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent w-64"
                         />
                         <FaSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
@@ -194,7 +213,31 @@ const StudentAdmin = () => {
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">STT</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Họ và tên</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ngày sinh</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Lớp</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        <div className="flex items-center gap-2">
+                                            <select
+                                                value={selectedClass}
+                                                onChange={(e) => {
+                                                    setSelectedClass(e.target.value);
+                                                    setCurrentPage(1);
+                                                }}
+                                                className="px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                                            >
+                                                <option value="all">LỚP</option>
+                                                {classes.map(cls => (
+                                                    <option key={cls.classid} value={cls.classid}>
+                                                        {cls.classname}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                            {/* <span 
+                                                className="cursor-pointer"
+                                                onClick={() => setSortByClass(!sortByClass)}
+                                            >
+                                                {sortByClass ? '▼' : '▲'}
+                                            </span> */}
+                                        </div>
+                                    </th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phụ huynh</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hành động</th>
                                 </tr>

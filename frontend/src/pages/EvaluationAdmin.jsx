@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import API_URL from '../config/api';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -12,6 +12,7 @@ const EvaluationAdmin = () => {
   const [teachers, setTeachers] = useState([]);
   const [userAccounts, setUserAccounts] = useState([]);
   const [students, setStudents] = useState([]);
+  const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -20,51 +21,80 @@ const EvaluationAdmin = () => {
   const [modalStudents, setModalStudents] = useState([]);
   const [currentEvaluation, setCurrentEvaluation] = useState(null);
 
+  // Thêm state cho filter
+  const [selectedClass, setSelectedClass] = useState('all');
+  const [selectedTeacher, setSelectedTeacher] = useState('all');
+  const [selectedType, setSelectedType] = useState('all'); // 'all', 'positive', 'negative'
+
+  // Cache danh sách giáo viên có đánh giá
+  const teachersWithEvaluations = useMemo(() => {
+    const teacherIds = new Set();
+    evaluations.forEach(ev => {
+      const section = sections.find(s => s.periodid === ev.periodid);
+      if (section) {
+        teacherIds.add(section.teacherid);
+      }
+    });
+    return Array.from(teacherIds).map(id => {
+      const teacher = teachers.find(t => t.teacherid === id);
+      if (!teacher) return null;
+      const user = userAccounts.find(u => u.userid === teacher.userid);
+      return {
+        id: teacher.teacherid,
+        name: user ? user.fullname : `Giáo viên ${teacher.teacherid}`
+      };
+    }).filter(Boolean);
+  }, [evaluations, sections, teachers, userAccounts]);
+
+  // Cache danh sách lớp có đánh giá
+  const classesWithEvaluations = useMemo(() => {
+    const classIds = new Set();
+    evaluations.forEach(ev => {
+      const section = sections.find(s => s.periodid === ev.periodid);
+      if (section) {
+        classIds.add(section.classid);
+      }
+    });
+    return Array.from(classIds).map(id => {
+      const cls = classes.find(c => c.classid === id);
+      return {
+        id: cls?.classid,
+        name: cls ? cls.classname : `Lớp ${id}`
+      };
+    });
+  }, [evaluations, sections, classes]);
+
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
         
-        // Add headers like in Postman
         const headers = {
           'Accept': 'application/json',
           'Content-Type': 'application/json'
         };
 
-        // Fetch evaluations with detailed logging
-        const evalRes = await fetch(`${API_URL}/api/Evaluation`, { headers });
-        console.log('Evaluation Response Status:', evalRes.status);
-        console.log('Evaluation Response Headers:', Object.fromEntries(evalRes.headers.entries()));
-        
-        if (!evalRes.ok) {
-          throw new Error(`Evaluation fetch failed with status: ${evalRes.status}`);
-        }
-
-        const evalText = await evalRes.text(); // Get raw response text
-        console.log('Raw Evaluation Response:', evalText);
-        
-        let evalData;
-        try {
-          evalData = JSON.parse(evalText);
-          console.log('Parsed Evaluation Data:', evalData);
-        } catch (e) {
-          console.error('JSON Parse Error:', e);
-          throw new Error('Failed to parse evaluation data');
-        }
-
-        // Fetch other data
-        const [sectionRes, classRes, teacherRes, userRes] = await Promise.all([
+        // Thêm fetch activities
+        const [evalRes, sectionRes, classRes, teacherRes, userRes, activityRes] = await Promise.all([
+          fetch(`${API_URL}/api/Evaluation`, { headers }),
           fetch(`${API_URL}/api/Period`, { headers }),
           fetch(`${API_URL}/api/Class`, { headers }),
           fetch(`${API_URL}/api/Teacher`, { headers }),
-          fetch(`${API_URL}/api/UserAccount/GetAllUserAccounts`, { headers })
+          fetch(`${API_URL}/api/UserAccount/GetAllUserAccounts`, { headers }),
+          fetch(`${API_URL}/api/Activity`, { headers })
         ]);
 
-        const [sections, classes, teachers, users] = await Promise.all([
+        if (!evalRes.ok || !sectionRes.ok || !classRes.ok || !teacherRes.ok || !userRes.ok || !activityRes.ok) {
+          throw new Error('Một hoặc nhiều API call thất bại');
+        }
+
+        const [evalData, sections, classes, teachers, users, activities] = await Promise.all([
+          evalRes.json(),
           sectionRes.json(),
           classRes.json(),
           teacherRes.json(),
-          userRes.json()
+          userRes.json(),
+          activityRes.json()
         ]);
 
         setSections(sections);
@@ -72,6 +102,7 @@ const EvaluationAdmin = () => {
         setTeachers(teachers);
         setUserAccounts(users);
         setEvaluations(evalData);
+        setActivities(activities);
         setError(null);
       } catch (err) {
         console.error('Error in fetchData:', err);
@@ -142,36 +173,119 @@ const EvaluationAdmin = () => {
     return `${evaluation.students.length} học sinh`;
   };
 
-  const sortedEvaluations = sortAsc
-    ? [...evaluations].sort((a, b) => {
+  // Lọc và sắp xếp evaluations
+  const filteredAndSortedEvaluations = useMemo(() => {
+    let filtered = [...evaluations];
+
+    // Lọc theo lớp
+    if (selectedClass !== 'all') {
+      filtered = filtered.filter(ev => {
+        const section = sections.find(s => s.periodid === ev.periodid);
+        return section && Number(section.classid) === Number(selectedClass);
+      });
+    }
+
+    // Lọc theo giáo viên
+    if (selectedTeacher !== 'all') {
+      filtered = filtered.filter(ev => {
+        const section = sections.find(s => s.periodid === ev.periodid);
+        return section && Number(section.teacherid) === Number(selectedTeacher);
+      });
+    }
+
+    // Lọc theo loại đánh giá dựa trên activity.isnegative
+    if (selectedType !== 'all') {
+      filtered = filtered.filter(ev => {
+        const activity = activities.find(act => act.activityid === ev.activityid);
+        if (!activity) return false;
+        return selectedType === 'negative' ? activity.isnegative : !activity.isnegative;
+      });
+    }
+
+    // Sắp xếp
+    return filtered.sort((a, b) => {
+      if (sortAsc) {
         const secA = getSectionInfo(a.periodid);
         const secB = getSectionInfo(b.periodid);
         const dateA = secA ? new Date(secA.perioddate) : new Date(0);
         const dateB = secB ? new Date(secB.perioddate) : new Date(0);
         return dateA - dateB;
-      })
-    : [...evaluations].sort((a, b) => {
+      } else {
         const dateA = new Date(a.createdat);
         const dateB = new Date(b.createdat);
         return dateB - dateA;
-      });
-
-  const totalPages = Math.ceil(sortedEvaluations.length / ITEMS_PER_PAGE);
-  const paginatedEvaluations = sortedEvaluations.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+      }
+    });
+  }, [evaluations, sections, selectedClass, selectedTeacher, selectedType, activities, sortAsc]);
 
   const handleSortDate = () => {
-    setSortAsc((prev) => !prev);
-    setCurrentPage(1);
+    setSortAsc(!sortAsc);
+    setCurrentPage(1); // Reset về trang 1 khi đổi sort
   };
 
-  const handlePageChange = (page) => {
-    if (page >= 1 && page <= totalPages) setCurrentPage(page);
+  const totalPages = Math.ceil(filteredAndSortedEvaluations.length / ITEMS_PER_PAGE);
+  const paginatedEvaluations = filteredAndSortedEvaluations.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
+  );
+
+  // Reset trang khi thay đổi filter
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedClass, selectedTeacher, selectedType]);
+
+  // Thêm hàm helper để lấy loại đánh giá
+  const getEvaluationType = (evaluation) => {
+    const activity = activities.find(act => act.activityid === evaluation.activityid);
+    return activity?.isnegative ? 'negative' : 'positive';
   };
 
   return (
     <div className="flex-1 p-6">
       <h2 className="text-2xl font-semibold mb-6">Quản lý đánh giá</h2>
       <div className="bg-white rounded-lg shadow-md p-6">
+        {/* Thêm phần filter */}
+        <div className="mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Lớp:</label>
+            <select
+              value={selectedClass}
+              onChange={(e) => setSelectedClass(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="all">Tất cả các lớp</option>
+              {classesWithEvaluations.map(cls => (
+                <option key={cls.id} value={cls.id}>{cls.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Giáo viên đánh giá:</label>
+            <select
+              value={selectedTeacher}
+              onChange={(e) => setSelectedTeacher(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="all">Tất cả giáo viên</option>
+              {teachersWithEvaluations.map(teacher => (
+                <option key={teacher.id} value={teacher.id}>{teacher.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Loại đánh giá:</label>
+            <select
+              value={selectedType}
+              onChange={(e) => setSelectedType(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="all">Tất cả</option>
+              <option value="positive">Tích cực</option>
+              <option value="negative">Tiêu cực</option>
+            </select>
+          </div>
+        </div>
+
         {loading ? (
           <div className="text-center py-8">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
@@ -179,8 +293,8 @@ const EvaluationAdmin = () => {
           </div>
         ) : error ? (
           <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-600">{error}</div>
-        ) : evaluations.length === 0 ? (
-          <div className="text-gray-500">Không có đánh giá nào.</div>
+        ) : filteredAndSortedEvaluations.length === 0 ? (
+          <div className="text-gray-500">Không có đánh giá nào phù hợp với bộ lọc.</div>
         ) : (
           <>
             <div className="overflow-x-auto">
@@ -199,6 +313,7 @@ const EvaluationAdmin = () => {
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Lớp</th>
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giáo viên đánh giá</th>
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nội dung đánh giá</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Loại</th>
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giờ tạo</th>
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Học sinh</th>
                   </tr>
@@ -214,6 +329,15 @@ const EvaluationAdmin = () => {
                         <td className="px-4 py-2 text-sm text-gray-900">{sec ? getClassName(sec.classid) : '-'}</td>
                         <td className="px-4 py-2 text-sm text-gray-900">{getTeacherName(ev.periodid)}</td>
                         <td className="px-4 py-2 text-sm text-gray-900 max-w-xs whitespace-pre-line break-words">{ev.content}</td>
+                        <td className="px-4 py-2 text-sm">
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                            getEvaluationType(ev) === 'negative' 
+                              ? 'bg-red-100 text-red-800' 
+                              : 'bg-green-100 text-green-800'
+                          }`}>
+                            {getEvaluationType(ev) === 'negative' ? 'Tiêu cực' : 'Tích cực'}
+                          </span>
+                        </td>
                         <td className="px-4 py-2 text-sm text-gray-900">{getDateTime(ev.createdat)}</td>
                         <td className="px-4 py-2 text-sm text-gray-900">
                           <button 
@@ -229,35 +353,40 @@ const EvaluationAdmin = () => {
                 </tbody>
               </table>
             </div>
-            <div className="flex justify-center items-center mt-6 gap-2">
-              <button
-                className="px-3 py-1 rounded border bg-gray-100 hover:bg-gray-200"
-                onClick={() => handlePageChange(currentPage - 1)}
-                disabled={currentPage === 1}
-              >
-                &lt;
-              </button>
-              {Array.from({ length: totalPages }, (_, i) => (
+            <div className="flex justify-between items-center mt-6">
+              <div className="text-sm text-gray-500">
+                Hiển thị {paginatedEvaluations.length} / {filteredAndSortedEvaluations.length} đánh giá
+              </div>
+              <div className="flex items-center gap-2">
                 <button
-                  key={i}
-                  className={`px-3 py-1 rounded border ${currentPage === i + 1 ? 'bg-blue-500 text-white' : 'bg-gray-100 hover:bg-gray-200'}`}
-                  onClick={() => handlePageChange(i + 1)}
+                  className="px-3 py-1 rounded border bg-gray-100 hover:bg-gray-200"
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={currentPage === 1}
                 >
-                  {i + 1}
+                  &lt;
                 </button>
-              ))}
-              <button
-                className="px-3 py-1 rounded border bg-gray-100 hover:bg-gray-200"
-                onClick={() => handlePageChange(currentPage + 1)}
-                disabled={currentPage === totalPages}
-              >
-                &gt;
-              </button>
+                {Array.from({ length: totalPages }, (_, i) => (
+                  <button
+                    key={i}
+                    className={`px-3 py-1 rounded border ${currentPage === i + 1 ? 'bg-blue-500 text-white' : 'bg-gray-100 hover:bg-gray-200'}`}
+                    onClick={() => handlePageChange(i + 1)}
+                  >
+                    {i + 1}
+                  </button>
+                ))}
+                <button
+                  className="px-3 py-1 rounded border bg-gray-100 hover:bg-gray-200"
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                >
+                  &gt;
+                </button>
+              </div>
             </div>
           </>
         )}
       </div>
-      {/* Modal danh sách học sinh */}
+      {/* Giữ nguyên phần modal */}
       {showStudentModal && currentEvaluation && (
         <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md">

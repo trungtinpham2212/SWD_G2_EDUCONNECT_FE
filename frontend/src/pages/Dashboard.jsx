@@ -26,42 +26,25 @@ const Dashboard = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) =
 
   // Lấy danh sách con
   useEffect(() => {
-    if (!parent || !parent.userId) return;
+    if (!parent) return;
     
     const fetchChildren = async () => {
       try {
         setLoading(true);
-        console.log('Đang lấy danh sách học sinh...');
-        const res = await fetch(`${API_URL}/api/Student`);
-        if (!res.ok) {
-          throw new Error('Không thể kết nối với server');
-        }
-        const allStudents = await res.json();
-        console.log('Tổng số học sinh:', allStudents.length);
-        console.log('Parent ID:', parent.userId);
+        console.log('Fetching children for parent:', parent.userId);
+        const res = await fetch(`${API_URL}/api/Student/GetStudentsByParentId/${parent.userId}`);
+        const myChildren = await res.json();
+        console.log('Children data:', myChildren);
         
-        // Lọc học sinh theo parent ID
-        const myChildren = allStudents.filter(student => 
-          student.parentid && Number(student.parentid) === Number(parent.userId)
-        );
-        
-        console.log('Số con của phụ huynh:', myChildren.length);
-        console.log('Danh sách con:', myChildren);
-
-        if (myChildren.length > 0) {
+        if (Array.isArray(myChildren) && myChildren.length > 0) {
           setChildren(myChildren);
           setSelectedChildId(myChildren[0].studentid);
-          setError(null);
         } else {
-          setError('Không tìm thấy thông tin con của bạn');
-          setChildren([]);
-          setSelectedChildId(null);
+          console.log('No children found or invalid data format');
         }
       } catch (err) {
-        console.error('Lỗi khi lấy danh sách con:', err);
-        setError('Không thể tải danh sách con: ' + err.message);
-        setChildren([]);
-        setSelectedChildId(null);
+        console.error('Error fetching children:', err);
+        setError('Không thể tải danh sách con');
       } finally {
         setLoading(false);
       }
@@ -76,45 +59,36 @@ const Dashboard = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) =
     const fetchData = async () => {
       try {
         setLoading(true);
-        console.log('Đang lấy dữ liệu thời khóa biểu cho học sinh:', selectedChildId);
+        console.log('Fetching schedule data for child:', selectedChildId);
         
         const [periodRes, subjectRes, classRes] = await Promise.all([
-          fetch(`${API_URL}/api/Period`),
+          fetch(`${API_URL}/api/Period/GetPeriodsByStudentId/${selectedChildId}`),
           fetch(`${API_URL}/api/Subject`),
           fetch(`${API_URL}/api/Class`)
         ]);
 
-        if (!periodRes.ok || !subjectRes.ok || !classRes.ok) {
-          throw new Error('Một số API không phản hồi');
-        }
+        const periodsData = await periodRes.json();
+        const subjectsData = await subjectRes.json();
+        const classesData = await classRes.json();
 
-        const [periodsData, subjectsData, classesData] = await Promise.all([
-          periodRes.json(),
-          subjectRes.json(),
-          classRes.json()
-        ]);
+        console.log('Schedule data:', {
+          periods: periodsData,
+          subjects: subjectsData,
+          classes: classesData
+        });
 
-        // Lọc periods theo lớp của học sinh được chọn
-        const selectedStudent = children.find(c => c.studentid === selectedChildId);
-        const filteredPeriods = periodsData.filter(p => p.classid === selectedStudent?.classid);
-
-        console.log('Số tiết học tìm thấy:', filteredPeriods.length);
-        console.log('Số môn học:', subjectsData.length);
-        console.log('Số lớp:', classesData.length);
-
-        setPeriods(filteredPeriods);
+        setPeriods(periodsData);
         setSubjects(subjectsData);
         setClasses(classesData);
-        setError(null);
       } catch (err) {
-        console.error('Lỗi khi lấy dữ liệu thời khóa biểu:', err);
-        setError('Không thể tải dữ liệu thời khóa biểu: ' + err.message);
+        console.error('Error fetching schedule data:', err);
+        setError('Không thể tải dữ liệu thời khóa biểu');
       } finally {
         setLoading(false);
       }
     };
     fetchData();
-  }, [selectedChildId, children]);
+  }, [selectedChildId]);
 
   // Helper lấy tên môn học và tên lớp
   const getSubjectName = (subjectid) => {
