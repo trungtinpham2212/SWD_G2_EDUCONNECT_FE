@@ -531,6 +531,9 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
     const subjectName = getSubjectName(section.subjectid);
     const teacherName = getTeacherName(section.teacherid);
 
+    // Kiểm tra đánh giá cho tiết học trong quá khứ
+    const hasEvaluation = isPast ? getEvaluationsForSection(section.periodid).length > 0 : null;
+
     return (
       <div 
         className={`h-16 border border-gray-200 ${isPast ? 'bg-yellow-50 hover:bg-yellow-100' : 'bg-blue-50 hover:bg-blue-100'} cursor-pointer p-2`}
@@ -544,12 +547,12 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
         </div>
         {isPast && (
           <div className="text-xs text-gray-500 mt-1">
-            Đã hoàn thành
+            {hasEvaluation ? 'Có đánh giá cho tiết học này' : 'Không có đánh giá cho tiết học này'}
           </div>
         )}
       </div>
     );
-  }, [getSectionForCell, handleCellClick, getSubjectName, getTeacherName, isDateInPast]);
+  }, [getSectionForCell, handleCellClick, getSubjectName, getTeacherName, isDateInPast, getEvaluationsForSection]);
 
   const generateWeekDates = useMemo(() => {
     if (!selectedWeek) return [];
