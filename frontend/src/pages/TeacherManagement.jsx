@@ -9,6 +9,8 @@ const TeacherManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
   const [subjects, setSubjects] = useState([]);
   const [classes, setClasses] = useState([]);
   const [schoolYears, setSchoolYears] = useState([]);
+  const [sections, setSections] = useState([]);
+  const [evaluations, setEvaluations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showModal, setShowModal] = useState(false);
@@ -32,24 +34,30 @@ const TeacherManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [userRes, teacherRes, subjectRes, classRes, yearRes] = await Promise.all([
+      const [userRes, teacherRes, subjectRes, classRes, yearRes, sectionRes, evaluationRes] = await Promise.all([
         fetch(`${API_URL}/api/UserAccount/GetAllUserAccounts`),
         fetch(`${API_URL}/api/Teacher`),
         fetch(`${API_URL}/api/Subject`),
         fetch(`${API_URL}/api/Class`),
-        fetch(`${API_URL}/api/SchoolYear`)
+        fetch(`${API_URL}/api/SchoolYear`),
+        fetch(`${API_URL}/api/Period`),
+        fetch(`${API_URL}/api/Evaluation`)
       ]);
       const userData = await userRes.json();
       const teacherData = await teacherRes.json();
       const subjectData = await subjectRes.json();
       const classData = await classRes.json();
       const yearData = await yearRes.json();
+      const sectionData = await sectionRes.json();
+      const evaluationData = await evaluationRes.json();
 
       setUserAccounts(userData.filter(u => u.roleid === 2));
       setTeachers(teacherData);
       setSubjects(subjectData);
       setClasses(classData);
       setSchoolYears(yearData);
+      setSections(sectionData);
+      setEvaluations(evaluationData);
       setError(null);
     } catch (error) {
       console.error(error);
@@ -119,22 +127,34 @@ const TeacherManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
     try {
       if (activeTab === 'user') {
         if (editingUser) {
+          // Chỉ gửi password nếu có nhập
+          const updateData = {
+            userId: editingUser.userid.toString(), // Chuyển thành string theo yêu cầu API
+            fullname: form.fullname.trim(),
+            email: form.email.trim(),
+            phoneNumber: form.phonenumber.trim(),
+            address: form.address.trim(),
+            roleId: 2 // Thêm roleId theo yêu cầu API
+          };
+
+          // Luôn gửi password - nếu không nhập mới thì gửi password hiện tại
+          if (form.password.trim()) {
+            updateData.password = form.password.trim();
+          } else {
+            // Nếu không nhập password mới, gửi password hiện tại (có thể cần lấy từ user data)
+            updateData.password = editingUser.password || ''; // Hoặc để trống nếu không có
+          }
+
           const response = await fetch(`${API_URL}/api/UserAccount/update/${editingUser.userid}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              password: form.password.trim(),
-              fullname: form.fullname.trim(),
-              email: form.email.trim(),
-              phonenumber: form.phonenumber.trim(),
-              address: form.address.trim()
-            })
+            body: JSON.stringify(updateData)
           });
 
           const text = await response.text();
           const normalized = text.replace(/"/g, '').trim();
 
-          if (response.ok || normalized.includes('Update successful')) {
+          if (response.ok || normalized.toLowerCase().includes('success') || normalized.includes('Update successful')) {
             await fetchData();
             setShowModal(false);
             toast.success('Cập nhật giáo viên thành công!');
@@ -142,63 +162,31 @@ const TeacherManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
             toast.error('Lỗi khi cập nhật: ' + normalized);
           }
         } else {
-          try {
-            const response = await fetch(`${API_URL}/api/UserAccount/register`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                username: form.username.trim(),
-                password: form.password.trim(),
-                fullname: form.fullname.trim(),
-                email: form.email.trim(),
-                phonenumber: form.phonenumber.trim(),
-                address: form.address.trim(),
-                roleid: 2
-              })
-            });
-          
-            const textRes = await response.text();
-            const normalized = textRes.replace(/"/g, '').trim();
-          
-            if (response.ok && normalized.toLowerCase().includes('registration successful')) {
-              // Tiếp tục: lấy user mới
-              const allUsersRes = await fetch(`${API_URL}/api/UserAccount/GetAllUserAccounts`);
-              const allUsers = await allUsersRes.json();
-          
-              const newUser = allUsers.find(u =>
-                u.username.toLowerCase().trim() === form.username.toLowerCase().trim()
-              );
-          
-              if (newUser) {
-                const teacherPayload = {
-                  userId: newUser.userid,
-                  subjectId: form.subjectid ? Number(form.subjectid) : null
-                };
-          
-                const teacherResponse = await fetch(`${API_URL}/api/Teacher`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify(teacherPayload)
-                });
-          
-                if (teacherResponse.ok) {
-                  // Thành công toàn bộ
-                  await fetchData();
-                  setShowModal(false);
-                  toast.success('Tạo giáo viên thành công!');
-                } else {
-                  const teacherError = await teacherResponse.text();
-                  toast.warn('Tạo tài khoản thành công nhưng tạo hồ sơ giáo viên thất bại: ' + teacherError);
-                }
-              } else {
-                toast.error('Tạo tài khoản thành công nhưng không tìm thấy user để tạo hồ sơ giáo viên.');
-              }
-            } else {
-              toast.error('Lỗi khi tạo tài khoản: ' + normalized);
-            }
-          } catch (error) {
-            console.error(error);
-            toast.error('Có lỗi xảy ra khi lưu giáo viên.');
+          // Sử dụng API mới hỗ trợ subjectId khi tạo giáo viên
+          const response = await fetch(`${API_URL}/api/UserAccount/register`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              username: form.username.trim(),
+              password: form.password.trim(),
+              fullname: form.fullname.trim(),
+              email: form.email.trim(),
+              phoneNumber: form.phonenumber.trim(), // Đổi tên field theo API
+              address: form.address.trim(),
+              roleId: 2, // Đổi tên field theo API
+              subjectId: form.subjectid ? Number(form.subjectid) : 0 // Thêm subjectId
+            })
+          });
+        
+          const textRes = await response.text();
+          const normalized = textRes.replace(/"/g, '').trim();
+        
+          if (response.ok && (normalized.toLowerCase().includes('success') || normalized.toLowerCase().includes('registration successful'))) {
+            await fetchData();
+            setShowModal(false);
+            toast.success('Tạo giáo viên thành công!');
+          } else {
+            toast.error('Lỗi khi tạo giáo viên: ' + normalized);
           }
         }
       } else if (activeTab === 'subject' && editingUser) {
@@ -213,13 +201,22 @@ const TeacherManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
             })
           });
 
-          if (response.ok) {
+          const responseText = await response.text();
+          const normalized = responseText.replace(/"/g, '').trim();
+
+          if (response.ok || normalized.toLowerCase().includes('success')) {
             await fetchData();
+            setShowModal(false);
             toast.success('Gán môn học thành công!');
           } else {
-            const errorText = await response.text();
-            toast.error('Lỗi khi gán môn học: ' + errorText);
+            toast.error('Lỗi khi gán môn học: ' + normalized);
           }
+        } else if (!teacher) {
+          toast.error('Không tìm thấy thông tin giáo viên');
+        } else if (!form.subjectid) {
+          toast.error('Vui lòng chọn môn học');
+        } else if (form.subjectid === teacher.subjectid) {
+          toast.info('Môn học đã được gán cho giáo viên này');
         }
         setShowModal(false);
       }
@@ -244,35 +241,109 @@ const TeacherManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
     if (!userToDelete) return;
     setIsDeleting(true);
     try {
-      if (userToDelete.teacherid) {
-        const teacherRes = await fetch(`${API_URL}/api/Teacher/${userToDelete.teacherid}`, {
-          method: 'DELETE'
-        });
-        if (!teacherRes.ok) {
-          const errorText = await teacherRes.text();
-          if (errorText.includes('REFERENCE constraint')) {
-            toast.error('Không thể xóa giáo viên đang làm chủ nhiệm lớp. Đổi giáo viên chủ nhiệm trước.');
-          } else {
-            toast.error('Lỗi khi xóa giáo viên: ' + errorText);
-          }
-          setIsDeleting(false);
-          setShowDeleteModal(false);
-          return;
-        }
+      // Kiểm tra xem giáo viên có dữ liệu liên quan không
+      const teacher = teachers.find(t => t.userid === userToDelete.userid);
+      if (!teacher) {
+        toast.error('Không tìm thấy thông tin giáo viên để xóa');
+        setIsDeleting(false);
+        setShowDeleteModal(false);
+        return;
       }
 
+      // Kiểm tra xem giáo viên có làm chủ nhiệm lớp không
+      const homeroomClass = classes.find(c => c.teacherhomeroomid === teacher.teacherid);
+      if (homeroomClass) {
+        toast.error(`Không thể xóa giáo viên vì đang làm chủ nhiệm lớp ${homeroomClass.classname}. Vui lòng đổi giáo viên chủ nhiệm trước.`);
+        setIsDeleting(false);
+        setShowDeleteModal(false);
+        return;
+      }
+
+      // Kiểm tra xem giáo viên có tiết học không
+      const hasPeriods = sections.some(s => s.teacherid === teacher.teacherid);
+      if (hasPeriods) {
+        toast.error('Không thể xóa giáo viên vì có tiết học được gán. Vui lòng xóa tất cả tiết học của giáo viên này trước.');
+        setIsDeleting(false);
+        setShowDeleteModal(false);
+        return;
+      }
+
+      // Kiểm tra xem giáo viên có đánh giá không
+      const hasEvaluations = evaluations.some(e => e.teacherid === teacher.teacherid);
+      if (hasEvaluations) {
+        toast.error('Không thể xóa giáo viên vì có đánh giá được tạo. Vui lòng xóa tất cả đánh giá của giáo viên này trước.');
+        setIsDeleting(false);
+        setShowDeleteModal(false);
+        return;
+      }
+
+      // Xóa teacher record trước - sử dụng teacherid từ teachers array
+      console.log('Attempting to delete teacher:', {
+        teacherid: teacher.teacherid,
+        userid: userToDelete.userid,
+        teacherData: teacher
+      });
+      
+      const teacherRes = await fetch(`${API_URL}/api/Teacher/${teacher.teacherid}`, {
+        method: 'DELETE'
+      });
+      
+      const teacherResText = await teacherRes.text();
+      const teacherResNormalized = teacherResText.replace(/"/g, '').trim();
+      
+      console.log('Teacher deletion response:', {
+        status: teacherRes.status,
+        ok: teacherRes.ok,
+        text: teacherResText,
+        normalized: teacherResNormalized
+      });
+      
+      if (!teacherRes.ok) {
+        if (teacherResText.includes('REFERENCE constraint') || teacherResText.includes('foreign key')) {
+          toast.error('Không thể xóa giáo viên vì có dữ liệu liên quan (tiết học, đánh giá, v.v.). Vui lòng xóa các dữ liệu liên quan trước.');
+        } else {
+          toast.error('Lỗi khi xóa hồ sơ giáo viên: ' + teacherResNormalized);
+        }
+        setIsDeleting(false);
+        setShowDeleteModal(false);
+        return;
+      }
+
+      console.log('Teacher deleted successfully, proceeding to delete user account...');
+
+      // Sau đó xóa user account
       const userRes = await fetch(`${API_URL}/api/UserAccount/${userToDelete.userid}`, {
         method: 'DELETE'
       });
-      if (userRes.ok) {
+      
+      const userResText = await userRes.text();
+      const userResNormalized = userResText.replace(/"/g, '').trim();
+      
+      console.log('User deletion response:', {
+        status: userRes.status,
+        ok: userRes.ok,
+        text: userResText,
+        normalized: userResNormalized
+      });
+      
+      if (userRes.ok || userResNormalized.toLowerCase().includes('success')) {
         await fetchData();
         toast.success('Xóa giáo viên thành công!');
       } else {
-        const errorText = await userRes.text();
-        toast.error('Đã xóa hồ sơ giáo viên nhưng lỗi khi xóa tài khoản: ' + errorText);
+        // Kiểm tra xem có phải lỗi foreign key constraint không
+        if (userResText.includes('foreign key') || userResText.includes('REFERENCE constraint') || userResText.includes('entity changes')) {
+          // Teacher đã được xóa thành công, nhưng user deletion failed
+          // Không cần retry delete teacher vì đã xóa rồi
+          toast.error('Đã xóa hồ sơ giáo viên nhưng không thể xóa tài khoản. Vui lòng thử lại sau hoặc liên hệ admin.');
+          // Refresh data để cập nhật UI
+          await fetchData();
+        } else {
+          toast.error('Lỗi khi xóa tài khoản: ' + userResNormalized);
+        }
       }
     } catch (error) {
-      toast.error('Có lỗi xảy ra khi xóa giáo viên.');
+      console.error('Delete error:', error);
+      toast.error('Có lỗi xảy ra khi xóa giáo viên: ' + error.message);
     } finally {
       setShowDeleteModal(false);
       setUserToDelete(null);
