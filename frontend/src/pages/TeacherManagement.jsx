@@ -19,15 +19,15 @@ const TeacherManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
     password: '',
     fullname: '',
     email: '',
-    phoneNumber: '',
+    phonenumber: '',
     address: '',
-    role: 2,
+    roleid: 2,
     subjectid: ''
   });
   const [editingUser, setEditingUser] = useState(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [userToDelete, setUserToDelete] = useState(null);
-  const [activeTab, setActiveTab] = useState('user'); // 'user' hoặc 'subject'
+  const [activeTab, setActiveTab] = useState('user');
 
   const fetchData = async () => {
     try {
@@ -44,6 +44,7 @@ const TeacherManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
       const subjectData = await subjectRes.json();
       const classData = await classRes.json();
       const yearData = await yearRes.json();
+
       setUserAccounts(userData.filter(u => u.roleid === 2));
       setTeachers(teacherData);
       setSubjects(subjectData);
@@ -52,9 +53,8 @@ const TeacherManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
       setError(null);
     } catch (error) {
       console.error(error);
-      toast.error('Có lỗi xảy ra khi tạo giáo viên: ' + error.message);
-    }
-    finally {
+      toast.error('Có lỗi xảy ra khi lấy dữ liệu: ' + error.message);
+    } finally {
       setLoading(false);
     }
   };
@@ -86,27 +86,26 @@ const TeacherManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
         password: '',
         fullname: user.fullname,
         email: user.email,
-        phoneNumber: user.phonenumber,
+        phonenumber: user.phonenumber,
         address: user.address,
-        role: user.roleid,
+        roleid: 2,
         subjectid: teacher ? teacher.subjectid : ''
       });
       setEditingUser(user);
-      setActiveTab('user');
     } else {
       setForm({
         username: '',
         password: '',
         fullname: '',
         email: '',
-        phoneNumber: '',
+        phonenumber: '',
         address: '',
-        role: 2,
+        roleid: 2,
         subjectid: ''
       });
       setEditingUser(null);
-      setActiveTab('user');
     }
+    setActiveTab('user');
     setShowModal(true);
   };
 
@@ -117,71 +116,95 @@ const TeacherManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
-    if (activeTab === 'user') {
-      try {
+    try {
+      if (activeTab === 'user') {
         if (editingUser) {
-          // Cập nhật tài khoản
           const response = await fetch(`${API_URL}/api/UserAccount/update/${editingUser.userid}`, {
             method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json'
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              password: form.password,
-              fullname: form.fullname,
-              email: form.email,
-              phoneNumber: form.phoneNumber,
-              address: form.address,
-              roleId: form.role
+              password: form.password.trim(),
+              fullname: form.fullname.trim(),
+              email: form.email.trim(),
+              phonenumber: form.phonenumber.trim(),
+              address: form.address.trim()
             })
           });
+
           const text = await response.text();
           const normalized = text.replace(/"/g, '').trim();
+
           if (response.ok || normalized.includes('Update successful')) {
             await fetchData();
             setShowModal(false);
             toast.success('Cập nhật giáo viên thành công!');
           } else {
-            toast.error('Có lỗi xảy ra khi cập nhật giáo viên: ' + normalized);
+            toast.error('Lỗi khi cập nhật: ' + normalized);
           }
         } else {
-          // Tạo mới
-          const response = await fetch(`${API_URL}/api/UserAccount/register`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              username: form.username,
-              password: form.password,
-              fullname: form.fullname,
-              email: form.email,
-              phoneNumber: form.phoneNumber,
-              address: form.address,
-              roleId: form.role
-            })
-          });
-          const textRes = await response.text();
-          const normalized = textRes.replace(/"/g, '').trim();
-          if (!response.ok || !normalized.includes('Registration successful')) {
-            toast.error('Có lỗi xảy ra khi tạo tài khoản: ' + normalized);
-            return;
+          try {
+            const response = await fetch(`${API_URL}/api/UserAccount/register`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                username: form.username.trim(),
+                password: form.password.trim(),
+                fullname: form.fullname.trim(),
+                email: form.email.trim(),
+                phonenumber: form.phonenumber.trim(),
+                address: form.address.trim(),
+                roleid: 2
+              })
+            });
+          
+            const textRes = await response.text();
+            const normalized = textRes.replace(/"/g, '').trim();
+          
+            if (response.ok && normalized.toLowerCase().includes('registration successful')) {
+              // Tiếp tục: lấy user mới
+              const allUsersRes = await fetch(`${API_URL}/api/UserAccount/GetAllUserAccounts`);
+              const allUsers = await allUsersRes.json();
+          
+              const newUser = allUsers.find(u =>
+                u.username.toLowerCase().trim() === form.username.toLowerCase().trim()
+              );
+          
+              if (newUser) {
+                const teacherPayload = {
+                  userId: newUser.userid,
+                  subjectId: form.subjectid ? Number(form.subjectid) : null
+                };
+          
+                const teacherResponse = await fetch(`${API_URL}/api/Teacher`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(teacherPayload)
+                });
+          
+                if (teacherResponse.ok) {
+                  // Thành công toàn bộ
+                  await fetchData();
+                  setShowModal(false);
+                  toast.success('Tạo giáo viên thành công!');
+                } else {
+                  const teacherError = await teacherResponse.text();
+                  toast.warn('Tạo tài khoản thành công nhưng tạo hồ sơ giáo viên thất bại: ' + teacherError);
+                }
+              } else {
+                toast.error('Tạo tài khoản thành công nhưng không tìm thấy user để tạo hồ sơ giáo viên.');
+              }
+            } else {
+              toast.error('Lỗi khi tạo tài khoản: ' + normalized);
+            }
+          } catch (error) {
+            console.error(error);
+            toast.error('Có lỗi xảy ra khi lưu giáo viên.');
           }
-          await fetchData();
-          setShowModal(false);
-          toast.success('Tạo giáo viên thành công!');
         }
-      } catch (error) {
-        console.error(error);
-        toast.error('Có lỗi xảy ra khi lưu giáo viên.');
-      } finally {
-        setIsSubmitting(false);
-      }
-    } else if (activeTab === 'subject' && editingUser) {
-      try {
+      } else if (activeTab === 'subject' && editingUser) {
         const teacher = teachers.find(t => t.userid === editingUser.userid);
         if (teacher && form.subjectid && form.subjectid !== teacher.subjectid) {
-          const response = await fetch(`${API_URL}/api/Teacher`, {
+          const response = await fetch(`${API_URL}/api/Teacher/${teacher.teacherid}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -189,40 +212,64 @@ const TeacherManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
               subjectId: Number(form.subjectid)
             })
           });
+
           if (response.ok) {
             await fetchData();
             toast.success('Gán môn học thành công!');
           } else {
             const errorText = await response.text();
-            toast.error('Có lỗi xảy ra khi gán môn học: ' + errorText);
+            toast.error('Lỗi khi gán môn học: ' + errorText);
           }
         }
         setShowModal(false);
-      } catch (error) {
-        toast.error('Có lỗi xảy ra khi gán môn học.');
-      } finally {
-        setIsSubmitting(false);
       }
+    } catch (error) {
+      console.error(error);
+      toast.error('Đã xảy ra lỗi khi xử lý.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const handleDelete = (userid) => {
-    setUserToDelete(userid);
+  const handleDelete = (user) => {
+    const teacher = teachers.find(t => t.userid === user.userid);
+    setUserToDelete({
+      ...user,
+      teacherid: teacher ? teacher.teacherid : null
+    });
     setShowDeleteModal(true);
   };
 
   const confirmDelete = async () => {
+    if (!userToDelete) return;
     setIsDeleting(true);
     try {
-      const response = await fetch(`${API_URL}/api/UserAccount/${userToDelete}`, {
+      if (userToDelete.teacherid) {
+        const teacherRes = await fetch(`${API_URL}/api/Teacher/${userToDelete.teacherid}`, {
+          method: 'DELETE'
+        });
+        if (!teacherRes.ok) {
+          const errorText = await teacherRes.text();
+          if (errorText.includes('REFERENCE constraint')) {
+            toast.error('Không thể xóa giáo viên đang làm chủ nhiệm lớp. Đổi giáo viên chủ nhiệm trước.');
+          } else {
+            toast.error('Lỗi khi xóa giáo viên: ' + errorText);
+          }
+          setIsDeleting(false);
+          setShowDeleteModal(false);
+          return;
+        }
+      }
+
+      const userRes = await fetch(`${API_URL}/api/UserAccount/${userToDelete.userid}`, {
         method: 'DELETE'
       });
-      if (response.ok) {
+      if (userRes.ok) {
         await fetchData();
         toast.success('Xóa giáo viên thành công!');
       } else {
-        const errorText = await response.text();
-        toast.error('Có lỗi xảy ra khi xóa giáo viên: ' + errorText);
+        const errorText = await userRes.text();
+        toast.error('Đã xóa hồ sơ giáo viên nhưng lỗi khi xóa tài khoản: ' + errorText);
       }
     } catch (error) {
       toast.error('Có lỗi xảy ra khi xóa giáo viên.');
@@ -279,7 +326,7 @@ const TeacherManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
                         <td className="px-4 py-2 text-sm text-gray-900">{homeroom ? homeroom.year : <span className="text-gray-400">-</span>}</td>
                         <td className="px-4 py-2 text-sm text-gray-900">
                           <button className="px-3 py-1 bg-yellow-600 text-white rounded hover:bg-yellow-700 mr-2" onClick={() => handleOpenModal(u)}>Sửa</button>
-                          <button className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700" onClick={() => handleDelete(u.userid)}>Xóa</button>
+                          <button className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700" onClick={() => handleDelete(u)}>Xóa</button>
                         </td>
                       </tr>
                     );
@@ -315,11 +362,11 @@ const TeacherManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
               <form onSubmit={handleSubmit}>
                 <div className="mb-4">
                   <label className="block text-sm font-medium text-gray-700">Tên đăng nhập</label>
-                  <input type="text" name="username" value={form.username} onChange={handleChange} required className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2" />
+                  <input type="text" name="username" value={form.username} onChange={handleChange} required className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2" disabled={!!editingUser} />
                 </div>
                 <div className="mb-4">
                   <label className="block text-sm font-medium text-gray-700">Mật khẩu</label>
-                  <input type="password" name="password" value={form.password} onChange={handleChange} required className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2" />
+                  <input type="password" name="password" value={form.password} onChange={handleChange} required={!editingUser} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2" placeholder={editingUser ? 'Để trống nếu không muốn đổi' : ''} />
                 </div>
                 <div className="mb-4">
                   <label className="block text-sm font-medium text-gray-700">Họ và tên</label>
@@ -331,12 +378,23 @@ const TeacherManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
                 </div>
                 <div className="mb-4">
                   <label className="block text-sm font-medium text-gray-700">Số điện thoại</label>
-                  <input type="text" name="phoneNumber" value={form.phoneNumber} onChange={handleChange} required className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2" />
+                  <input type="text" name="phonenumber" value={form.phonenumber} onChange={handleChange} required className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2" />
                 </div>
                 <div className="mb-4">
                   <label className="block text-sm font-medium text-gray-700">Địa chỉ</label>
                   <input type="text" name="address" value={form.address} onChange={handleChange} required className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2" />
                 </div>
+                {!editingUser && (
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700">Môn dạy</label>
+                  <select name="subjectid" value={form.subjectid} onChange={handleChange} required className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2">
+                    <option value="">-- Chọn môn --</option>
+                    {subjects.map(sub => (
+                      <option key={sub.subjectid} value={sub.subjectid}>{sub.subjectname}</option>
+                    ))}
+                  </select>
+                </div>
+                )}
                 <div className="flex justify-end mt-6">
                   <button 
                     type="button" 

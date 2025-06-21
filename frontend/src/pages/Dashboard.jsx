@@ -75,7 +75,7 @@ const Dashboard = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) =
 
         // Lấy tất cả dữ liệu cần thiết
         const [periodRes, subjectRes, classRes] = await Promise.all([
-          fetch(`${API_URL}/api/Period/GetPeriodsByStudentId/${selectedChildId}`),
+          fetch(`${API_URL}/api/Period`),
           fetch(`${API_URL}/api/Subject`),
           fetch(`${API_URL}/api/Class`)
         ]);
@@ -90,10 +90,7 @@ const Dashboard = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) =
           classRes.json()
         ]);
 
-        // Lọc periods theo lớp của học sinh được chọn
-        const filteredPeriods = periodsData.filter(p => p.classid === selectedStudent.classid);
-
-        console.log('Số tiết học tìm thấy:', filteredPeriods.length);
+        console.log('Tổng số tiết học đã tải:', periodsData.length);
         console.log('Số môn học:', subjectsData.length);
         console.log('Số lớp:', classesData.length);
 
