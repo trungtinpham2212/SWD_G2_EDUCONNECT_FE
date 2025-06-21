@@ -54,7 +54,7 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
         ]);
 
         // Lọc section của giáo viên này
-        const mySections = sectionData.filter(sec => Number(sec.teacherid) === Number(user?.teacherid));
+        const mySections = sectionData.filter(sec => Number(sec.teacherid) === Number(user?.teacherId));
         setSections(mySections);
         setClasses(classData);
         setActivities(activities);
@@ -73,10 +73,10 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
       }
     };
 
-    if (user?.teacherid) {
+    if (user?.teacherId) {
       fetchData();
     }
-  }, [user?.teacherid, location.pathname]);
+  }, [user?.teacherId, location.pathname]);
 
   // Cache danh sách lớp có đánh giá
   const classesWithEvaluations = useMemo(() => {
