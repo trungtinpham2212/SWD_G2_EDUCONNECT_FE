@@ -81,7 +81,7 @@ const Schedule = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) =>
           const sectionDateStr = section.perioddate.split('T')[0];
           // So sánh chuỗi ngày thay vì đối tượng Date để tránh lệch múi giờ
           const isInWeek = sectionDateStr >= startStr && sectionDateStr <= endStr;
-          const isTeacherMatch = Number(section.teacherid) === Number(user?.teacherid);
+          const isTeacherMatch = Number(section.teacherid) === Number(user?.teacherId);
           return isInWeek && isTeacherMatch;
         });
         setSections(filteredSections);
@@ -93,10 +93,10 @@ const Schedule = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) =>
         setLoading(false);
       }
     };
-    if (user?.teacherid) {
+    if (user?.teacherId) {
       fetchSections();
     }
-  }, [currentWeek, user?.teacherid]);
+  }, [currentWeek, user?.teacherId]);
 
   const navigateWeek = (direction) => {
     const newDate = new Date(currentWeek);

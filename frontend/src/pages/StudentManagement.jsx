@@ -21,7 +21,7 @@ const StudentManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
         }
         const classData = await classResponse.json();
         // Tìm lớp mà giáo viên này làm chủ nhiệm
-        const foundClass = classData.find(cls => cls.teacherhomeroomid === user.teacherid);
+        const foundClass = classData.find(cls => cls.teacherhomeroomid === user.teacherId);
         setHomeroomClass(foundClass || null);
         if (foundClass) {
           // Fetch all students
@@ -50,7 +50,7 @@ const StudentManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
       }
     };
     fetchData();
-  }, [user.teacherid]);
+  }, [user.teacherId]);
 
   // Format date to Vietnamese format
   const formatDate = (dateString) => {
