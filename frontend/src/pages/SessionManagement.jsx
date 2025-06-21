@@ -519,7 +519,7 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
     if (!section) {
       return (
         <div 
-          className={`h-16 border border-gray-200 ${isPast ? 'bg-gray-100' : 'bg-gray-50 hover:bg-gray-100'} cursor-pointer flex items-center justify-center text-xs text-gray-500`}
+          className={`h-20 border border-gray-200 ${isPast ? 'bg-gray-100' : 'bg-gray-50 hover:bg-gray-100'} cursor-pointer flex items-center justify-center text-xs text-gray-500`}
           onClick={() => handleCellClick(classId, periodNo, date)}
         >
           +
@@ -531,13 +531,13 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
     const subjectName = getSubjectName(section.subjectid);
     const teacherName = getTeacherName(section.teacherid);
 
-    // Kiểm tra đánh giá cho tiết học trong quá khứ
-    const hasEvaluation = isPast ? getEvaluationsForSection(section.periodid).length > 0 : null;
-    const evaluationCount = isPast ? getEvaluationsForSection(section.periodid).length : 0;
+    // Kiểm tra đánh giá cho tiết học
+    const sectionEvaluations = getEvaluationsForSection(section.periodid);
+    const evaluationCount = sectionEvaluations.length;
 
     return (
       <div 
-        className={`h-16 border border-gray-200 ${isPast ? 'bg-yellow-50 hover:bg-yellow-100' : 'bg-blue-50 hover:bg-blue-100'} cursor-pointer p-2`}
+        className={`h-20 border border-gray-200 ${isPast ? 'bg-yellow-50 hover:bg-yellow-100' : 'bg-blue-50 hover:bg-blue-100'} cursor-pointer p-2 flex flex-col justify-center`}
         onClick={() => handleCellClick(classId, periodNo, date)}
       >
         <div className={`text-xs font-medium ${isPast ? 'text-yellow-800' : 'text-blue-800'}`}>
@@ -546,11 +546,9 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
         <div className={`text-xs ${isPast ? 'text-yellow-600' : 'text-blue-600'}`}>
           {teacherName !== '-' ? 'Giáo viên: ' + teacherName : 'Chưa có giáo viên'}
         </div>
-        {isPast && (
-          <div className="text-xs text-gray-500 mt-1">
-            {hasEvaluation ? `Có ${evaluationCount} đánh giá cho tiết học này` : 'Không có đánh giá cho tiết học này'}
-          </div>
-        )}
+        <div className={`text-xs font-medium mt-1 ${evaluationCount > 0 ? 'text-green-600' : 'text-gray-500'}`}>
+          {evaluationCount > 0 ? `Có ${evaluationCount} đánh giá` : 'Chưa có đánh giá'}
+        </div>
       </div>
     );
   }, [getSectionForCell, handleCellClick, getSubjectName, getTeacherName, isDateInPast, getEvaluationsForSection]);
