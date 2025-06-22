@@ -228,90 +228,63 @@ const TeacherManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
     }
   };
 
-  const handleDelete = (user) => {
+  const handleDelete = async (user) => {
     const teacher = teachers.find(t => t.userid === user.userid);
+    
     setUserToDelete({
       ...user,
-      teacherid: teacher ? teacher.teacherid : null
+      teacherid: teacher?.teacherid || null
     });
     setShowDeleteModal(true);
   };
 
   const confirmDelete = async () => {
     if (!userToDelete) return;
+    
     setIsDeleting(true);
     try {
-      // Kiểm tra xem giáo viên có dữ liệu liên quan không
       const teacher = teachers.find(t => t.userid === userToDelete.userid);
-      if (!teacher) {
-        toast.error('Không tìm thấy thông tin giáo viên để xóa');
-        setIsDeleting(false);
-        setShowDeleteModal(false);
-        return;
-      }
-
-      // Kiểm tra xem giáo viên có làm chủ nhiệm lớp không
-      const homeroomClass = classes.find(c => c.teacherhomeroomid === teacher.teacherid);
-      if (homeroomClass) {
-        toast.error(`Không thể xóa giáo viên vì đang làm chủ nhiệm lớp ${homeroomClass.classname}. Vui lòng đổi giáo viên chủ nhiệm trước.`);
-        setIsDeleting(false);
-        setShowDeleteModal(false);
-        return;
-      }
-
-      // Kiểm tra xem giáo viên có tiết học không
-      const hasPeriods = sections.some(s => s.teacherid === teacher.teacherid);
-      if (hasPeriods) {
-        toast.error('Không thể xóa giáo viên vì có tiết học được gán. Vui lòng xóa tất cả tiết học của giáo viên này trước.');
-        setIsDeleting(false);
-        setShowDeleteModal(false);
-        return;
-      }
-
-      // Kiểm tra xem giáo viên có đánh giá không
-      const hasEvaluations = evaluations.some(e => e.teacherid === teacher.teacherid);
-      if (hasEvaluations) {
-        toast.error('Không thể xóa giáo viên vì có đánh giá được tạo. Vui lòng xóa tất cả đánh giá của giáo viên này trước.');
-        setIsDeleting(false);
-        setShowDeleteModal(false);
-        return;
-      }
-
-      // Xóa teacher record trước - sử dụng teacherid từ teachers array
-      console.log('Attempting to delete teacher:', {
-        teacherid: teacher.teacherid,
-        userid: userToDelete.userid,
-        teacherData: teacher
-      });
       
-      const teacherRes = await fetch(`${API_URL}/api/Teacher/${teacher.teacherid}`, {
-        method: 'DELETE'
-      });
-      
-      const teacherResText = await teacherRes.text();
-      const teacherResNormalized = teacherResText.replace(/"/g, '').trim();
-      
-      console.log('Teacher deletion response:', {
-        status: teacherRes.status,
-        ok: teacherRes.ok,
-        text: teacherResText,
-        normalized: teacherResNormalized
-      });
-      
-      if (!teacherRes.ok) {
-        if (teacherResText.includes('REFERENCE constraint') || teacherResText.includes('foreign key')) {
-          toast.error('Không thể xóa giáo viên vì có dữ liệu liên quan (tiết học, đánh giá, v.v.). Vui lòng xóa các dữ liệu liên quan trước.');
-        } else {
-          toast.error('Lỗi khi xóa hồ sơ giáo viên: ' + teacherResNormalized);
+      // Nếu có teacher record, kiểm tra các ràng buộc trước khi xóa
+      if (teacher) {
+        // Kiểm tra chủ nhiệm lớp
+        const homeroomClass = classes.find(c => c.teacherhomeroomid === teacher.teacherid);
+        if (homeroomClass) {
+          toast.error(`Không thể xóa giáo viên vì đang làm chủ nhiệm lớp ${homeroomClass.classname}. Vui lòng đổi giáo viên chủ nhiệm trước.`);
+          return;
         }
-        setIsDeleting(false);
-        setShowDeleteModal(false);
-        return;
+
+        // Kiểm tra tiết học
+        const hasPeriods = sections.some(s => s.teacherid === teacher.teacherid);
+        if (hasPeriods) {
+          toast.error('Không thể xóa giáo viên vì có tiết học được gán. Vui lòng xóa tất cả tiết học của giáo viên này trước.');
+          return;
+        }
+
+        // Kiểm tra đánh giá
+        const hasEvaluations = evaluations.some(e => e.teacherid === teacher.teacherid);
+        if (hasEvaluations) {
+          toast.error('Không thể xóa giáo viên vì có đánh giá được tạo. Vui lòng xóa tất cả đánh giá của giáo viên này trước.');
+          return;
+        }
+
+        // Xóa teacher record trước
+        const teacherRes = await fetch(`${API_URL}/api/Teacher/${teacher.teacherid}`, {
+          method: 'DELETE'
+        });
+        
+        if (!teacherRes.ok) {
+          const teacherResText = await teacherRes.text();
+          if (teacherResText.includes('REFERENCE constraint') || teacherResText.includes('foreign key')) {
+            toast.error('Không thể xóa giáo viên vì có dữ liệu liên quan. Vui lòng xóa các dữ liệu liên quan trước.');
+          } else {
+            toast.error('Lỗi khi xóa hồ sơ giáo viên.');
+          }
+          return;
+        }
       }
 
-      console.log('Teacher deleted successfully, proceeding to delete user account...');
-
-      // Sau đó xóa user account
+      // Xóa user account
       const userRes = await fetch(`${API_URL}/api/UserAccount/${userToDelete.userid}`, {
         method: 'DELETE'
       });
@@ -319,31 +292,25 @@ const TeacherManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
       const userResText = await userRes.text();
       const userResNormalized = userResText.replace(/"/g, '').trim();
       
-      console.log('User deletion response:', {
-        status: userRes.status,
-        ok: userRes.ok,
-        text: userResText,
-        normalized: userResNormalized
-      });
+      const isSuccess = userRes.ok || 
+                       userResNormalized.toLowerCase().includes('success') ||
+                       userResNormalized.toLowerCase().includes('delete') ||
+                       userRes.status === 200 ||
+                       userRes.status === 204;
       
-      if (userRes.ok || userResNormalized.toLowerCase().includes('success')) {
+      if (isSuccess) {
         await fetchData();
         toast.success('Xóa giáo viên thành công!');
       } else {
-        // Kiểm tra xem có phải lỗi foreign key constraint không
         if (userResText.includes('foreign key') || userResText.includes('REFERENCE constraint') || userResText.includes('entity changes')) {
-          // Teacher đã được xóa thành công, nhưng user deletion failed
-          // Không cần retry delete teacher vì đã xóa rồi
-          toast.error('Đã xóa hồ sơ giáo viên nhưng không thể xóa tài khoản. Vui lòng thử lại sau hoặc liên hệ admin.');
-          // Refresh data để cập nhật UI
+          toast.error('Đã xóa hồ sơ giáo viên nhưng không thể xóa tài khoản. Vui lòng thử lại sau.');
           await fetchData();
         } else {
-          toast.error('Lỗi khi xóa tài khoản: ' + userResNormalized);
+          toast.error('Lỗi khi xóa tài khoản.');
         }
       }
     } catch (error) {
-      console.error('Delete error:', error);
-      toast.error('Có lỗi xảy ra khi xóa giáo viên: ' + error.message);
+      toast.error('Có lỗi xảy ra khi xóa giáo viên.');
     } finally {
       setShowDeleteModal(false);
       setUserToDelete(null);
