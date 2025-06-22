@@ -14,6 +14,7 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [sortField, setSortField] = useState('createdat'); // 'perioddate' hoặc 'createdat'
   const [sortAsc, setSortAsc] = useState(false);
   const location = useLocation();
   const [showStudentModal, setShowStudentModal] = useState(false);
@@ -23,6 +24,7 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
   // Thêm state cho filter
   const [selectedClass, setSelectedClass] = useState('all');
   const [selectedType, setSelectedType] = useState('all'); // 'all', 'positive', 'negative'
+  const [selectedDate, setSelectedDate] = useState(''); // Thêm filter ngày
 
   useEffect(() => {
     const fetchData = async () => {
@@ -163,24 +165,42 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
       });
     }
 
+    // Lọc theo ngày
+    if (selectedDate) {
+      filtered = filtered.filter(ev => {
+        const section = sections.find(s => s.periodid === ev.periodid);
+        if (!section) return false;
+        const sectionDate = new Date(section.perioddate).toISOString().split('T')[0];
+        return sectionDate === selectedDate;
+      });
+    }
+
     // Sắp xếp
     return filtered.sort((a, b) => {
-      if (sortAsc) {
+      let dateA, dateB;
+      
+      if (sortField === 'perioddate') {
         const secA = getSectionInfo(a.periodid);
         const secB = getSectionInfo(b.periodid);
-        const dateA = secA ? new Date(secA.perioddate) : new Date(0);
-        const dateB = secB ? new Date(secB.perioddate) : new Date(0);
-        return dateA - dateB;
+        dateA = secA ? new Date(secA.perioddate) : new Date(0);
+        dateB = secB ? new Date(secB.perioddate) : new Date(0);
       } else {
-        const dateA = new Date(a.createdat);
-        const dateB = new Date(b.createdat);
-        return dateB - dateA;
+        // sortField === 'createdat'
+        dateA = new Date(a.createdat);
+        dateB = new Date(b.createdat);
       }
+      
+      return sortAsc ? dateA - dateB : dateB - dateA;
     });
-  }, [evaluations, sections, selectedClass, selectedType, activities, sortAsc]);
+  }, [evaluations, sections, selectedClass, selectedType, selectedDate, activities, sortField, sortAsc]);
 
-  const handleSortDate = () => {
-    setSortAsc(!sortAsc);
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortAsc(!sortAsc);
+    } else {
+      setSortField(field);
+      setSortAsc(false); // Mặc định sắp xếp mới nhất trước
+    }
     setCurrentPage(1); // Reset về trang 1 khi đổi sort
   };
 
@@ -193,7 +213,7 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
   // Reset trang khi thay đổi filter
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedClass, selectedType]);
+  }, [selectedClass, selectedType, selectedDate]);
 
   // Thêm hàm helper để lấy loại đánh giá
   const getEvaluationType = (evaluation) => {
@@ -206,7 +226,7 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
       <h2 className="text-2xl font-semibold mb-6">Quản lý đánh giá</h2>
       <div className="bg-white rounded-lg shadow-md p-6">
         {/* Thêm phần filter */}
-        <div className="mb-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Lớp:</label>
             <select
@@ -232,6 +252,15 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
               <option value="negative">Tiêu cực</option>
             </select>
           </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Ngày:</label>
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
         </div>
 
         {loading ? (
@@ -249,20 +278,26 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">STT</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tiết</th>
+                    <td className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">STT</td>
+                    <td className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tiết</td>
                     <th
-                      className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none"
-                      onClick={handleSortDate}
+                      className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none hover:bg-gray-100"
+                      onClick={() => handleSort('perioddate')}
                     >
                       Ngày
-                      <span className="ml-1">{sortAsc ? '▲' : '▼'}</span>
+                      {sortField === 'perioddate' && <span className="ml-1">{sortAsc ? '▲' : '▼'}</span>}
                     </th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Lớp</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nội dung đánh giá</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Loại</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giờ tạo</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Học sinh</th>
+                    <td className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Lớp</td>
+                    <td className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nội dung đánh giá</td>
+                    <td className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Loại</td>
+                    <th
+                      className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none hover:bg-gray-100"
+                      onClick={() => handleSort('createdat')}
+                    >
+                      Giờ tạo
+                      {sortField === 'createdat' && <span className="ml-1">{sortAsc ? '▲' : '▼'}</span>}
+                    </th>
+                    <td className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Học sinh</td>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -379,6 +414,7 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
           </div>
         </div>
       )}
+      <ToastContainer />
     </div>
   );
 };
