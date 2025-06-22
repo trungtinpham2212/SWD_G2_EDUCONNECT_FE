@@ -56,9 +56,9 @@ const StudentsIcon = (props) => (
   </svg>
 );
 
-const SectionDetail = () => {
-  const { sectionid } = useParams();
-  const [sectionInfo, setSectionInfo] = useState(null);
+const SessionDetail = () => {
+  const { sessionid } = useParams();
+  const [sessionInfo, setSessionInfo] = useState(null);
   const [classInfo, setClassInfo] = useState(null);
   const [students, setStudents] = useState([]);
   const [teacherName, setTeacherName] = useState('');
@@ -75,18 +75,18 @@ const SectionDetail = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const fetchSectionAndStudents = async () => {
+    const fetchSessionAndStudents = async () => {
       try {
         setLoading(true);
-        const sectionRes = await fetch(`${API_URL}/api/Period/${sectionid}`);
-        if (!sectionRes.ok) throw new Error('Không thể tải dữ liệu tiết học');
-        const sectionData = await sectionRes.json();
-        setSectionInfo(sectionData);
+        const sessionRes = await fetch(`${API_URL}/api/Period/${sessionid}`);
+        if (!sessionRes.ok) throw new Error('Không thể tải dữ liệu buổi học');
+        const sessionData = await sessionRes.json();
+        setSessionInfo(sessionData);
 
         const classRes = await fetch(`${API_URL}/api/Class`);
         if (!classRes.ok) throw new Error('Không thể tải dữ liệu lớp');
         const classData = await classRes.json();
-        const foundClass = classData.find(cls => cls.classid === sectionData.classid);
+        const foundClass = classData.find(cls => cls.classid === sessionData.classid);
         setClassInfo(foundClass || null);
         if (!foundClass) {
           setError('Không tìm thấy thông tin lớp học.');
@@ -122,10 +122,10 @@ const SectionDetail = () => {
         setLoading(false);
       }
     };
-    if (sectionid) {
-      fetchSectionAndStudents();
+    if (sessionid) {
+      fetchSessionAndStudents();
     }
-  }, [sectionid]);
+  }, [sessionid]);
 
   useEffect(() => {
     const fetchActivities = async () => {
@@ -167,7 +167,7 @@ const SectionDetail = () => {
       const createdAtStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}T${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
       
       const evaluationData = {
-        periodid: Number(sectionid),
+        periodid: Number(sessionid),
         content: contentToSend,
         activityid: Number(selectedActivityId),
         students: studentsArr,
@@ -217,23 +217,23 @@ const SectionDetail = () => {
       {loading ? (
         <div className="text-center py-20">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Đang tải thông tin tiết học...</p>
+          <p className="mt-4 text-gray-600">Đang tải thông tin buổi học...</p>
         </div>
       ) : error ? (
         <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded-md" role="alert">
           <p className="font-bold">Lỗi</p>
           <p>{error}</p>
         </div>
-      ) : !sectionInfo || !classInfo ? (
-        <div className="text-center py-20 text-gray-500">Không tìm thấy thông tin tiết học.</div>
+      ) : !sessionInfo || !classInfo ? (
+        <div className="text-center py-20 text-gray-500">Không tìm thấy thông tin buổi học.</div>
       ) : (
         <div className="space-y-6">
           <div className="bg-white p-6 rounded-2xl shadow-sm">
-            <h2 className="text-2xl font-bold text-gray-800 mb-6">Thông tin tiết học</h2>
+            <h2 className="text-2xl font-bold text-gray-800 mb-6">Thông tin buổi học</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-5">
               <InfoItem icon={<ClassIcon />} label="Lớp" value={classInfo.classname} />
-              <InfoItem icon={<PeriodIcon />} label="Tiết" value={sectionInfo.periodno} />
-              <InfoItem icon={<CalendarIcon />} label="Ngày" value={new Date(sectionInfo.perioddate).toLocaleDateString('vi-VN')} />
+              <InfoItem icon={<PeriodIcon />} label="Tiết" value={sessionInfo.periodno} />
+              <InfoItem icon={<CalendarIcon />} label="Ngày" value={new Date(sessionInfo.perioddate).toLocaleDateString('vi-VN')} />
               <InfoItem icon={<TeacherIcon />} label="Giáo viên CN" value={teacherName} />
               <InfoItem icon={<StudentsIcon />} label="Sĩ số" value={`${students.length} học sinh`} />
             </div>
@@ -394,4 +394,4 @@ const SectionDetail = () => {
   );
 };
 
-export default SectionDetail; 
+export default SessionDetail; 

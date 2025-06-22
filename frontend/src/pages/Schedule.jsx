@@ -126,7 +126,7 @@ const Schedule = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) =>
   };
 
   const handleClassClick = (periodid) => {
-    navigate(`/section/${periodid}`);
+    navigate(`/session/${periodid}`);
   };
 
   const renderWeekHeader = () => {

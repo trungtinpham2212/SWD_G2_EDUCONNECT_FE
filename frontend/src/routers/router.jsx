@@ -14,7 +14,7 @@ import ActivityLog from "../pages/ActivityLog";
 import Setting from "../pages/Setting";
 import Schedule from "../pages/Schedule";
 import Sidebar from "../components/Sidebar";
-import SectionDetail from "../pages/SectionDetail";
+import SessionDetail from "../pages/SessionDetail";
 import StudentAdmin from '../pages/StudentAdmin';
 import EvaluationAdmin from '../pages/EvaluationAdmin';
 
@@ -163,9 +163,9 @@ export const createRoutes = ({ user, active, setActive, isSidebarOpen, setSideba
       />
     },
     {
-      path: "/section/:sectionid",
+      path: "/session/:sessionid",
       element: <ProtectedLayout 
-        element={SectionDetail}
+        element={SessionDetail}
         allowedRoles={[1,2]}
         {...commonProps}
       />

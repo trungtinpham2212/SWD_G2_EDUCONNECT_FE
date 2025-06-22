@@ -163,29 +163,29 @@ const TeacherManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
           }
         } else {
           // Sử dụng API mới hỗ trợ subjectId khi tạo giáo viên
-          const response = await fetch(`${API_URL}/api/UserAccount/register`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              username: form.username.trim(),
-              password: form.password.trim(),
-              fullname: form.fullname.trim(),
-              email: form.email.trim(),
+            const response = await fetch(`${API_URL}/api/UserAccount/register`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                username: form.username.trim(),
+                password: form.password.trim(),
+                fullname: form.fullname.trim(),
+                email: form.email.trim(),
               phoneNumber: form.phonenumber.trim(), // Đổi tên field theo API
-              address: form.address.trim(),
+                address: form.address.trim(),
               roleId: 2, // Đổi tên field theo API
               subjectId: form.subjectid ? Number(form.subjectid) : 0 // Thêm subjectId
-            })
-          });
-        
-          const textRes = await response.text();
-          const normalized = textRes.replace(/"/g, '').trim();
-        
+              })
+            });
+          
+            const textRes = await response.text();
+            const normalized = textRes.replace(/"/g, '').trim();
+          
           if (response.ok && (normalized.toLowerCase().includes('success') || normalized.toLowerCase().includes('registration successful'))) {
-            await fetchData();
-            setShowModal(false);
-            toast.success('Tạo giáo viên thành công!');
-          } else {
+                  await fetchData();
+                  setShowModal(false);
+                  toast.success('Tạo giáo viên thành công!');
+                } else {
             toast.error('Lỗi khi tạo giáo viên: ' + normalized);
           }
         }
