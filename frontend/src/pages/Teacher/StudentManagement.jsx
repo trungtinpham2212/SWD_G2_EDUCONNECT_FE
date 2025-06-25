@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { FaSearch, FaUserGraduate, FaBirthdayCake, FaUserFriends } from 'react-icons/fa';
-import API_URL from '../config/api';
+import API_URL from '../../config/api';
 
 const StudentManagement = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) => {
   const [students, setStudents] = useState([]);

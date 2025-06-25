@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { FaCalendarAlt, FaChevronLeft, FaChevronRight } from 'react-icons/fa';
-import API_URL from '../config/api';
+import API_URL from '../../config/api';
 import { useNavigate } from 'react-router-dom';
 
 const Schedule = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) => {

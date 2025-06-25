@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import API_URL from '../config/api';
+import API_URL from '../../config/api';
 
 const ITEMS_PER_PAGE = 20;
 

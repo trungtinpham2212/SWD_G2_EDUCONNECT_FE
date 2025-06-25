@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import API_URL from '../config/api';
+import API_URL from '../../config/api';
 
-const Dashboard = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) => {
+const ParentDashboard = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) => {
   const [children, setChildren] = useState([]);
   const [selectedChildId, setSelectedChildId] = useState(null);
   const [periods, setPeriods] = useState([]);
@@ -10,30 +10,55 @@ const Dashboard = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) =
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [currentWeek, setCurrentWeek] = useState(new Date('2024-12-02'));
+  const [parentDetails, setParentDetails] = useState(null);
 
   // Lấy thông tin user từ localStorage nếu chưa có
-  const [parent, setParent] = useState(user || null);
+  const [loggedInUser, setLoggedInUser] = useState(user || null);
   useEffect(() => {
-    if (!parent) {
+    if (!loggedInUser) {
       const userStr = localStorage.getItem('user');
       if (userStr) {
         try {
-          setParent(JSON.parse(userStr));
+          setLoggedInUser(JSON.parse(userStr));
         } catch {}
       }
     }
-  }, [parent]);
+  }, [loggedInUser]);
+
+  // Nếu là phụ huynh, gọi API để lấy thông tin chi tiết (bao gồm cả parentId)
+  useEffect(() => {
+    if (loggedInUser && loggedInUser.roleId === 3 && loggedInUser.userId) {
+      const fetchParentDetails = async () => {
+        try {
+          setLoading(true);
+          const res = await fetch(`${API_URL}/api/UserAccount/GetUserAccount/${loggedInUser.userId}`);
+          if (!res.ok) {
+            throw new Error('Không thể tải thông tin phụ huynh');
+          }
+          const data = await res.json();
+          // Gán parentId bằng userId vì API user account không trả về parentId trực tiếp
+          setParentDetails({ ...data, parentId: data.userid });
+        } catch (err) {
+          console.error('Error fetching parent details:', err);
+          setError(err.message);
+        } finally {
+          setLoading(false);
+        }
+      };
+      fetchParentDetails();
+    }
+  }, [loggedInUser]);
 
   // Lấy danh sách con sử dụng API mới
   useEffect(() => {
-    if (!parent || !parent.userId || parent.roleId !== 3) return;
+    if (!parentDetails || !parentDetails.parentId) return;
     
     const fetchChildren = async () => {
       try {
         setLoading(true);
-        console.log('Đang lấy danh sách học sinh cho phụ huynh:', parent.userId);
+        console.log('Đang lấy danh sách học sinh cho phụ huynh:', parentDetails.parentId);
         
-        const res = await fetch(`${API_URL}/api/Student/parent/${parent.userId}`);
+        const res = await fetch(`${API_URL}/api/Student/parent/${parentDetails.parentId}`);
         if (!res.ok) {
           throw new Error('Không thể kết nối với server');
         }
@@ -56,11 +81,11 @@ const Dashboard = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) =
       }
     };
     fetchChildren();
-  }, [parent]);
+  }, [parentDetails]);
 
   // Lấy periods, subjects, classes khi có selectedChildId
   useEffect(() => {
-    if (!selectedChildId || !parent || parent.roleId !== 3) return;
+    if (!selectedChildId || !loggedInUser || loggedInUser.roleId !== 3) return;
     
     const fetchData = async () => {
       try {
@@ -105,7 +130,7 @@ const Dashboard = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) =
       }
     };
     fetchData();
-  }, [selectedChildId, children, parent]);
+  }, [selectedChildId, children, loggedInUser]);
 
   // Helper lấy tên môn học và tên lớp
   const getSubjectName = (subjectid) => {
@@ -219,35 +244,7 @@ const Dashboard = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) =
     setCurrentWeek(newDate);
   };
 
-  if (parent && parent.roleId === 1) {
-    return (
-      <div className="flex-1 p-6">
-        <h2 className="text-2xl font-semibold mb-6">Xin chào {parent.userName}, chúc bạn một ngày tốt lành!</h2>
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <h3 className="text-xl font-semibold text-blue-600 mb-4">Đây là Dashboard Admin</h3>
-          <p className="text-gray-600">
-            Chào mừng bạn đến với hệ thống quản lý giáo dục EduConnect - Trang quản trị
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  if (parent && parent.roleId === 2) {
-    return (
-      <div className="flex-1 p-6">
-        <h2 className="text-2xl font-semibold mb-6">Xin chào {parent.userName}, chúc bạn một ngày tốt lành!</h2>
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <h3 className="text-xl font-semibold text-green-600 mb-4">Đây là Dashboard Teacher</h3>
-          <p className="text-gray-600">
-            Chào mừng bạn đến với hệ thống quản lý giáo dục EduConnect - Trang giáo viên
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  if (loading) {
+  if (loading && (!loggedInUser || loggedInUser.roleId === 3)) {
     return (
       <div className="flex-1 p-6">
         <div className="flex items-center justify-center h-64">
@@ -267,10 +264,18 @@ const Dashboard = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) =
     );
   }
 
-  if (parent && parent.roleId === 3) {
+  if (loggedInUser && loggedInUser.roleId === 3) {
+    if (!children.length) {
+       return <div className="flex-1 p-6">
+        <h2 className="text-2xl font-semibold mb-6">Xin chào {loggedInUser.userName}, chúc bạn một ngày tốt lành!</h2>
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-yellow-600">
+         Tài khoản của bạn chưa được liên kết với học sinh nào.
+        </div>
+      </div>
+    }
     return (
       <div className="flex-1 p-6">
-        <h2 className="text-2xl font-semibold mb-6">Xin chào {parent.userName}, chúc bạn một ngày tốt lành!</h2>
+        <h2 className="text-2xl font-semibold mb-6">Xin chào {loggedInUser.userName}, chúc bạn một ngày tốt lành!</h2>
         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-2">Chọn con để xem thời khóa biểu:</label>
@@ -335,18 +340,5 @@ const Dashboard = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) =
       </div>
     );
   }
-
-  // ... giữ nguyên phần dashboard cho các role khác ...
-  return (
-    <div className="flex-1 p-6">
-      <h2 className="text-2xl font-semibold mb-6">Trang: {active}</h2>
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <p className="text-gray-600">
-          Chào mừng bạn đến với hệ thống quản lý giáo dục EduConnect
-        </p>
-      </div>
-    </div>
-  );
 };
-
-export default Dashboard;
+export default ParentDashboard; 

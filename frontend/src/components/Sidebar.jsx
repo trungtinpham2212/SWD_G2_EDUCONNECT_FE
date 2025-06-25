@@ -25,9 +25,9 @@ const getMenuItems = (roleId) => {
         { name: "Quản lý lớp học", icon: <FaChalkboard />, path: "/classes" },
         { name: "Quản lý tiết học", icon: <FaClock />, path: "/sessions" },
         { name: "Quản lý đánh giá", icon: <FaStar />, path: "/admin/evaluations" },
-        { name: "Báo cáo", icon: <FaChartBar />, path: "/reports" },
+        { name: "Báo cáo", icon: <FaChartBar />, path: "/admin/reports" },
         { name: "Lịch sử hoạt động", icon: <FaHistory />, path: "/activity-logs" },
-        { name: "Cài đặt", icon: <FaCog />, path: "/settings" },
+        { name: "Cài đặt", icon: <FaCog />, path: "/admin/settings" },
       ];
     case 2: // Giáo viên
       return [
@@ -35,7 +35,7 @@ const getMenuItems = (roleId) => {
         { name: "Lịch giảng dạy", icon: <FaCalendarAlt />, path: "/teaching-schedule" },
         { name: "Học sinh", icon: <FaUserGraduate />, path: "/students" },
         { name: "Quản lý đánh giá", icon: <FaStar />, path: "/evaluations" },
-        { name: "Báo cáo", icon: <FaChartBar />, path: "/reports" },
+        { name: "Báo cáo", icon: <FaChartBar />, path: "/teacher/reports" },
       ];
     case 3: // Phụ huynh
       return baseItems;

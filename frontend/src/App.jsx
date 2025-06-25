@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { createRoutes } from './routers/router';
-import SessionDetail from './pages/SessionDetail';
+import SessionDetail from './pages/Teacher/SessionDetail';
 
 function App() {
   const [active, setActive] = useState("Trang chủ");

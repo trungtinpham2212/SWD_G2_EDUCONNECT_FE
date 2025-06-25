@@ -1,22 +1,42 @@
 import { Navigate } from 'react-router-dom';
 import Login from "../components/Login";
-import Dashboard from "../pages/Dashboard";
-import TeacherManagement from "../pages/TeacherManagement";
-import ParentManagement from "../pages/ParentManagement";
-import StudentManagement from "../pages/StudentManagement";
-import SchoolYearManagement from "../pages/SchoolYearManagement";
-import SubjectManagement from "../pages/SubjectManagement";
-import ClassManagement from "../pages/ClassManagement";
-import SessionManagement from "../pages/SessionManagement";
-import EvaluationManagement from "../pages/EvaluationManagement";
-import ReportManagement from "../pages/ReportManagement";
-import ActivityLog from "../pages/ActivityLog";
-import Setting from "../pages/Setting";
-import Schedule from "../pages/Schedule";
+import ParentDashboard from "../pages/Parent/ParentDashboard";
+import AdminDashboard from "../pages/Admin/AdminDashboard";
+import TeacherDashboard from "../pages/Teacher/TeacherDashboard";
+import TeacherManagement from "../pages/Admin/TeacherManagement";
+import ParentManagement from "../pages/Admin/ParentManagement";
+import StudentManagement from "../pages/Teacher/StudentManagement";
+import SchoolYearManagement from "../pages/Admin/SchoolYearManagement";
+import SubjectManagement from "../pages/Admin/SubjectManagement";
+import ClassManagement from "../pages/Admin/ClassManagement";
+import SessionManagement from "../pages/Admin/SessionManagement";
+import EvaluationManagement from "../pages/Teacher/EvaluationManagement";
+import ReportManagement from "../pages/Teacher/ReportManagement";
+import ActivityLog from "../pages/Admin/ActivityLog";
+import AdminSetting from "../pages/Admin/AdminSetting";
+import Schedule from "../pages/Teacher/Schedule";
 import Sidebar from "../components/Sidebar";
-import SessionDetail from "../pages/SessionDetail";
-import StudentAdmin from '../pages/StudentAdmin';
-import EvaluationAdmin from '../pages/EvaluationAdmin';
+import SessionDetail from "../pages/Teacher/SessionDetail";
+import StudentAdmin from '../pages/Admin/StudentAdmin';
+import EvaluationAdmin from '../pages/Admin/EvaluationAdmin';
+import ReportAdmin from '../pages/Admin/ReportAdmin';
+import TeacherSetting from '../pages/Teacher/TeacherSetting';
+import ReportTeacher from '../pages/Teacher/ReportManagement';
+// Dynamic Dashboard component that renders based on user role
+const DynamicDashboard = ({ user, ...props }) => {
+  if (!user) return null;
+  
+  switch (user.roleId) {
+    case 1: // Admin
+      return <AdminDashboard user={user} {...props} />;
+    case 2: // Teacher
+      return <TeacherDashboard user={user} {...props} />;
+    case 3: // Parent
+      return <ParentDashboard user={user} {...props} />;
+    default:
+      return <ParentDashboard user={user} {...props} />;
+  }
+};
 
 // Layout component for protected routes
 const ProtectedLayout = ({ element: Component, allowedRoles, user, ...props }) => {
@@ -56,11 +76,11 @@ export const createRoutes = ({ user, active, setActive, isSidebarOpen, setSideba
       path: "/login",
       element: <Login setUser={handleSetUser} />
     },
-    // Dashboard - accessible by all roles
+    // Dashboard - accessible by all roles, renders appropriate dashboard based on role
     {
       path: "/dashboard",
       element: <ProtectedLayout 
-        element={Dashboard}
+        element={DynamicDashboard}
         allowedRoles={[1, 2, 3]}
         {...commonProps}
       />
@@ -147,9 +167,9 @@ export const createRoutes = ({ user, active, setActive, isSidebarOpen, setSideba
       />
     },
     {
-      path: "/settings",
+      path: "/admin/settings",
       element: <ProtectedLayout 
-        element={Setting}
+        element={AdminSetting}
         allowedRoles={[1]}
         {...commonProps}
       />
@@ -183,6 +203,30 @@ export const createRoutes = ({ user, active, setActive, isSidebarOpen, setSideba
       element: <ProtectedLayout 
         element={EvaluationAdmin}
         allowedRoles={[1]}
+        {...commonProps}
+      />
+    },
+    {
+      path: "/admin/reports",
+      element: <ProtectedLayout 
+        element={ReportAdmin}
+        allowedRoles={[1]}
+        {...commonProps}
+      />
+    },
+    {
+      path: "/teacher/settings",
+      element: <ProtectedLayout 
+        element={TeacherSetting}
+        allowedRoles={[2]}
+        {...commonProps}
+      />
+    },
+    {
+      path: "/teacher/reports",
+      element: <ProtectedLayout 
+        element={ReportTeacher}
+        allowedRoles={[2]}
         {...commonProps}
       />
     },
