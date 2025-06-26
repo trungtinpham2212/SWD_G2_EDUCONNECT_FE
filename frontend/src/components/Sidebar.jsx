@@ -1,6 +1,8 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { FaTachometerAlt, FaChalkboardTeacher, FaUserFriends, FaUserGraduate, FaChartBar, FaCog, FaBars, FaSignOutAlt, FaCalendarAlt, FaHistory, FaCaretDown, FaUserCog, FaCalendar, FaBook, FaChalkboard, FaClock, FaStar } from "react-icons/fa";
 import { useNavigate, useLocation } from "react-router-dom";
+import API_URL from '../config/api';
+
 
 const getMenuItems = (roleId) => {
   const baseItems = [
@@ -42,6 +44,8 @@ const getMenuItems = (roleId) => {
     default:
       return baseItems;
   }
+
+  
 };
 
 const Sidebar = ({ active, setActive, isOpen, setIsOpen, user }) => {
@@ -50,6 +54,26 @@ const Sidebar = ({ active, setActive, isOpen, setIsOpen, user }) => {
   const [openDropdown, setOpenDropdown] = useState(null);
 
   const menuItems = getMenuItems(user?.roleId);
+
+  // Avatar state
+  const [avatarUrl, setAvatarUrl] = useState(null);
+
+  useEffect(() => {
+    const fetchAvatar = async () => {
+      if (user?.userId) {
+        try {
+          const res = await fetch(`${API_URL}/api/user-accounts/${user.userId}`);
+          if (res.ok) {
+            const data = await res.json();
+            setAvatarUrl(data.avatarurl || null);
+          }
+        } catch (e) {
+          setAvatarUrl(null);
+        }
+      }
+    };
+    fetchAvatar();
+  }, [user?.userId]);
 
   const handleLogout = () => {
     localStorage.removeItem('user');
@@ -162,9 +186,17 @@ const Sidebar = ({ active, setActive, isOpen, setIsOpen, user }) => {
           {isOpen ? (
             <div className="flex items-center justify-between">
               <div className="flex items-center min-w-0">
-                <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white font-medium">
-                  {user?.userName?.charAt(0)?.toUpperCase() || 'U'}
-                </div>
+                {avatarUrl ? (
+                  <img
+                    src={avatarUrl}
+                    alt="avatar"
+                    className="w-8 h-8 rounded-full object-cover border-2 border-blue-200"
+                  />
+                ) : (
+                  <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white font-medium">
+                    {user?.userName?.charAt(0)?.toUpperCase() || 'U'}
+                  </div>
+                )}
                 <div className="ml-3 flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-700 truncate">{user?.userName || 'User'}</p>
                   <p className="text-xs text-gray-500 truncate">{user?.email || 'user@educonnect.com'}</p>
