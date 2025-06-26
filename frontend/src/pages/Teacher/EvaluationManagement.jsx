@@ -38,10 +38,10 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
 
         // Lấy tất cả section mà giáo viên này dạy
         const [sectionRes, classRes, evalRes, activityRes] = await Promise.all([
-          fetch(`${API_URL}/api/Period`, { headers }),
-          fetch(`${API_URL}/api/Class`, { headers }),
-          fetch(`${API_URL}/api/Evaluation`, { headers }),
-          fetch(`${API_URL}/api/Activity`, { headers })
+          fetch(`${API_URL}/api/periods`, { headers }),
+          fetch(`${API_URL}/api/classes`, { headers }),
+          fetch(`${API_URL}/api/evaluations`, { headers }),
+          fetch(`${API_URL}/api/activities`, { headers })
         ]);
 
         if (!sectionRes.ok || !classRes.ok || !evalRes.ok || !activityRes.ok) {

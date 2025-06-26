@@ -52,8 +52,8 @@ const Schedule = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) =>
     const fetchSubjectsAndClasses = async () => {
       try {
         const [subjectRes, classRes] = await Promise.all([
-          fetch(`${API_URL}/api/Subject`),
-          fetch(`${API_URL}/api/Class`)
+          fetch(`${API_URL}/api/subjects`),
+          fetch(`${API_URL}/api/classes`)
         ]);
         setSubjects(await subjectRes.json());
         setClasses(await classRes.json());
@@ -67,7 +67,7 @@ const Schedule = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) =>
     const fetchSections = async () => {
       try {
         setLoading(true);
-        const response = await fetch(`${API_URL}/api/Period`);
+        const response = await fetch(`${API_URL}/api/periods`);
         if (!response.ok) {
           throw new Error('Failed to fetch schedule data');
         }

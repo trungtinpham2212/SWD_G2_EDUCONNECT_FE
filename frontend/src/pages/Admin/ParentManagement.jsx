@@ -33,9 +33,9 @@ const ParentManagement = ({ user, active, setActive, isSidebarOpen, setSidebarOp
     try {
       setLoading(true);
       const [userRes, studentRes, classRes] = await Promise.all([
-        fetch(`${API_URL}/api/UserAccount/GetAllUserAccounts`),
-        fetch(`${API_URL}/api/Student`),
-        fetch(`${API_URL}/api/Class`)
+        fetch(`${API_URL}/api/user-accounts`),
+        fetch(`${API_URL}/api/students`),
+        fetch(`${API_URL}/api/classes`)
       ]);
       const userData = await userRes.json();
       const studentData = await studentRes.json();

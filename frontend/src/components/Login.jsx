@@ -24,7 +24,7 @@ const Login = ({ setUser }) => {
     e.preventDefault();
     setIsLoading(true);
     try {
-      const response = await fetch(`${API_URL}/api/UserAccount/login`, {
+      const response = await fetch(`${API_URL}/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -47,10 +47,22 @@ const Login = ({ setUser }) => {
         toast.success('Đăng nhập thành công!');
         setTimeout(() => navigate('/dashboard'), 1000);
       } else {
-        toast.error('Tên đăng nhập hoặc mật khẩu không đúng');
+        // Handle different error status codes
+        if (response.status === 403) {
+          toast.error('Tài khoản của bạn đã bị khóa. Vui lòng liên hệ quản trị viên để được hỗ trợ.');
+        } else if (response.status === 401) {
+          toast.error('Tên đăng nhập hoặc mật khẩu không đúng');
+        } else if (response.status === 400) {
+          toast.error('Dữ liệu đăng nhập không hợp lệ');
+        } else if (response.status >= 500) {
+          toast.error('Lỗi hệ thống. Vui lòng thử lại sau');
+        } else {
+          toast.error('Có lỗi xảy ra khi đăng nhập');
+        }
       }
     } catch (err) {
-      toast.error('Có lỗi xảy ra, vui lòng thử lại sau');
+      console.error('Login error:', err);
+      toast.error('Không thể kết nối đến máy chủ. Vui lòng kiểm tra kết nối mạng và thử lại');
     } finally {
       setIsLoading(false);
     }

@@ -31,7 +31,7 @@ const ParentDashboard = ({ user, active, setActive, isSidebarOpen, setSidebarOpe
       const fetchParentDetails = async () => {
         try {
           setLoading(true);
-          const res = await fetch(`${API_URL}/api/UserAccount/GetUserAccount/${loggedInUser.userId}`);
+          const res = await fetch(`${API_URL}/api/user-accounts/${loggedInUser.userId}`);
           if (!res.ok) {
             throw new Error('Không thể tải thông tin phụ huynh');
           }
@@ -58,7 +58,7 @@ const ParentDashboard = ({ user, active, setActive, isSidebarOpen, setSidebarOpe
         setLoading(true);
         console.log('Đang lấy danh sách học sinh cho phụ huynh:', parentDetails.parentId);
         
-        const res = await fetch(`${API_URL}/api/Student/parent/${parentDetails.parentId}`);
+        const res = await fetch(`${API_URL}/api/students/parent/${parentDetails.parentId}`);
         if (!res.ok) {
           throw new Error('Không thể kết nối với server');
         }
@@ -100,9 +100,9 @@ const ParentDashboard = ({ user, active, setActive, isSidebarOpen, setSidebarOpe
 
         // Lấy tất cả dữ liệu cần thiết
         const [periodRes, subjectRes, classRes] = await Promise.all([
-          fetch(`${API_URL}/api/Period`),
-          fetch(`${API_URL}/api/Subject`),
-          fetch(`${API_URL}/api/Class`)
+          fetch(`${API_URL}/api/periods`),
+          fetch(`${API_URL}/api/subjects`),
+          fetch(`${API_URL}/api/classes`)
         ]);
 
         if (!periodRes.ok || !subjectRes.ok || !classRes.ok) {

@@ -13,7 +13,7 @@ const SchoolYearManagement = ({ user, active, setActive, isSidebarOpen, setSideb
   const fetchData = async () => {
     try {
       setLoading(true);
-      const schoolYearRes = await fetch(`${API_URL}/api/SchoolYear`);
+      const schoolYearRes = await fetch(`${API_URL}/api/school-years`);
       const schoolYearData = await schoolYearRes.json();
       setSchoolYears(schoolYearData);
 

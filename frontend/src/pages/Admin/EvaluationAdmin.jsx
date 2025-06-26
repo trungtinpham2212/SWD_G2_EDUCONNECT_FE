@@ -76,12 +76,12 @@ const EvaluationAdmin = () => {
 
         // Thêm fetch activities
         const [evalRes, sectionRes, classRes, teacherRes, userRes, activityRes] = await Promise.all([
-          fetch(`${API_URL}/api/Evaluation`, { headers }),
-          fetch(`${API_URL}/api/Period`, { headers }),
-          fetch(`${API_URL}/api/Class`, { headers }),
-          fetch(`${API_URL}/api/Teacher`, { headers }),
-          fetch(`${API_URL}/api/UserAccount/GetAllUserAccounts`, { headers }),
-          fetch(`${API_URL}/api/Activity`, { headers })
+          fetch(`${API_URL}/api/evaluations`, { headers }),
+          fetch(`${API_URL}/api/periods`, { headers }),
+          fetch(`${API_URL}/api/classes`, { headers }),
+          fetch(`${API_URL}/api/teachers`, { headers }),
+          fetch(`${API_URL}/api/user-accounts`, { headers }),
+          fetch(`${API_URL}/api/activities`, { headers })
         ]);
 
         if (!evalRes.ok || !sectionRes.ok || !classRes.ok || !teacherRes.ok || !userRes.ok || !activityRes.ok) {

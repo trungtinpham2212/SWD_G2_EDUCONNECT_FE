@@ -203,15 +203,15 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
       try {
         setLoading(true);
         const [sectionRes, subjectRes, classRes, teacherRes, userRes, evalRes, activityRes, schoolYearRes, studentRes] = await Promise.all([
-          fetch(`${API_URL}/api/Period`),
-          fetch(`${API_URL}/api/Subject`),
-          fetch(`${API_URL}/api/Class`),
-          fetch(`${API_URL}/api/Teacher`),
-          fetch(`${API_URL}/api/UserAccount/GetAllUserAccounts`),
-          fetch(`${API_URL}/api/Evaluation`),
-          fetch(`${API_URL}/api/Activity`),
-          fetch(`${API_URL}/api/SchoolYear`),
-          fetch(`${API_URL}/api/Student`)
+          fetch(`${API_URL}/api/periods`),
+          fetch(`${API_URL}/api/subjects`),
+          fetch(`${API_URL}/api/classes`),
+          fetch(`${API_URL}/api/teachers`),
+          fetch(`${API_URL}/api/user-accounts`),
+          fetch(`${API_URL}/api/evaluations`),
+          fetch(`${API_URL}/api/activities`),
+          fetch(`${API_URL}/api/school-years`),
+          fetch(`${API_URL}/api/students`)
         ]);
 
         if (!sectionRes.ok || !subjectRes.ok || !classRes.ok || !teacherRes.ok || !userRes.ok || !evalRes.ok || !activityRes.ok || !schoolYearRes.ok || !studentRes.ok) {
@@ -397,8 +397,8 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
       setLoading(true);
       const method = isEditMode ? 'PUT' : 'POST';
       const url = isEditMode 
-        ? `${API_URL}/api/Period/${excludePeriodId}`
-        : `${API_URL}/api/Period`;
+        ? `${API_URL}/api/periods/${excludePeriodId}`
+        : `${API_URL}/api/periods`;
 
       // Format date to match API requirements
       const date = new Date(selectedCell.date);
@@ -457,7 +457,7 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
       }
 
       // Reload data
-      const sectionRes = await fetch(`${API_URL}/api/Period`);
+      const sectionRes = await fetch(`${API_URL}/api/periods`);
       if (!sectionRes.ok) {
         throw new Error('Không thể tải lại dữ liệu tiết học');
       }
@@ -484,7 +484,7 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
   const confirmDelete = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`${API_URL}/api/Period/${sectionToDelete}`, { method: 'DELETE' });
+      const res = await fetch(`${API_URL}/api/periods/${sectionToDelete}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Xóa tiết học thất bại');
       
       setSections(sections.filter(s => s.periodid !== sectionToDelete));

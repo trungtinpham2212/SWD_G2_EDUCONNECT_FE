@@ -35,13 +35,13 @@ const TeacherManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
     try {
       setLoading(true);
       const [userRes, teacherRes, subjectRes, classRes, yearRes, sectionRes, evaluationRes] = await Promise.all([
-        fetch(`${API_URL}/api/UserAccount/GetAllUserAccounts`),
-        fetch(`${API_URL}/api/Teacher`),
-        fetch(`${API_URL}/api/Subject`),
-        fetch(`${API_URL}/api/Class`),
-        fetch(`${API_URL}/api/SchoolYear`),
-        fetch(`${API_URL}/api/Period`),
-        fetch(`${API_URL}/api/Evaluation`)
+        fetch(`${API_URL}/api/user-accounts`),
+        fetch(`${API_URL}/api/teachers`),
+        fetch(`${API_URL}/api/subjects`),
+        fetch(`${API_URL}/api/classes`),
+        fetch(`${API_URL}/api/school-years`),
+        fetch(`${API_URL}/api/periods`),
+        fetch(`${API_URL}/api/evaluations`)
       ]);
       const userData = await userRes.json();
       const teacherData = await teacherRes.json();
@@ -145,7 +145,7 @@ const TeacherManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
             updateData.password = editingUser.password || ''; // Hoặc để trống nếu không có
           }
 
-          const response = await fetch(`${API_URL}/api/UserAccount/update/${editingUser.userid}`, {
+          const response = await fetch(`${API_URL}/api/user-accounts/${editingUser.userid}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(updateData)
@@ -163,7 +163,7 @@ const TeacherManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
           }
         } else {
           // Sử dụng API mới hỗ trợ subjectId khi tạo giáo viên
-            const response = await fetch(`${API_URL}/api/UserAccount/register`, {
+            const response = await fetch(`${API_URL}/auth/register`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -192,7 +192,7 @@ const TeacherManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
       } else if (activeTab === 'subject' && editingUser) {
         const teacher = teachers.find(t => t.userid === editingUser.userid);
         if (teacher && form.subjectid && form.subjectid !== teacher.subjectid) {
-          const response = await fetch(`${API_URL}/api/Teacher/${teacher.teacherid}`, {
+          const response = await fetch(`${API_URL}/api/teachers/${teacher.teacherid}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -269,7 +269,7 @@ const TeacherManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
         }
 
         // Xóa teacher record trước
-        const teacherRes = await fetch(`${API_URL}/api/Teacher/${teacher.teacherid}`, {
+        const teacherRes = await fetch(`${API_URL}/api/teachers/${teacher.teacherid}`, {
           method: 'DELETE'
         });
         
@@ -285,7 +285,7 @@ const TeacherManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
       }
 
       // Xóa user account
-      const userRes = await fetch(`${API_URL}/api/UserAccount/${userToDelete.userid}`, {
+      const userRes = await fetch(`${API_URL}/api/user-accounts/${userToDelete.userid}`, {
         method: 'DELETE'
       });
       

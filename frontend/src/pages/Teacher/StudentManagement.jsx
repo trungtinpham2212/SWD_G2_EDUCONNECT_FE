@@ -15,7 +15,7 @@ const StudentManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
       try {
         setLoading(true);
         // Fetch all classes
-        const classResponse = await fetch(`${API_URL}/api/Class`);
+        const classResponse = await fetch(`${API_URL}/api/classes`);
         if (!classResponse.ok) {
           throw new Error('Failed to fetch classes data');
         }
@@ -25,7 +25,7 @@ const StudentManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
         setHomeroomClass(foundClass || null);
         if (foundClass) {
           // Fetch all students
-          const studentResponse = await fetch(`${API_URL}/api/Student`);
+          const studentResponse = await fetch(`${API_URL}/api/students`);
           if (!studentResponse.ok) {
             throw new Error('Failed to fetch students data');
           }
@@ -34,7 +34,7 @@ const StudentManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
           const filteredStudents = studentData.filter(student => student.classid === foundClass.classid);
           setStudents(filteredStudents);
           // Fetch all parent accounts
-          const parentRes = await fetch(`${API_URL}/api/UserAccount/GetAllUserAccounts`);
+          const parentRes = await fetch(`${API_URL}/api/user-accounts`);
           const parentData = await parentRes.json();
           setParentAccounts(parentData);
         } else {

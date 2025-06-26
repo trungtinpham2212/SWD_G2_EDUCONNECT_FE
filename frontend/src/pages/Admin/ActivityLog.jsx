@@ -36,8 +36,8 @@ const ActivityLog = ({ user, active, setActive, isSidebarOpen, setSidebarOpen })
       try {
         setLoading(true);
         const [logRes, userRes] = await Promise.all([
-          fetch(`${API_URL}/api/LogActivity`),
-          fetch(`${API_URL}/api/UserAccount/GetAllUserAccounts`)
+          fetch(`${API_URL}/api/log-activities`),
+          fetch(`${API_URL}/api/user-accounts`)
         ]);
         const logData = await logRes.json();
         const userData = await userRes.json();

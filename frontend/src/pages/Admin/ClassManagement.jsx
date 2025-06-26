@@ -31,11 +31,11 @@ const ClassManagement = ({ user, active, setActive, isSidebarOpen, setSidebarOpe
     try {
       setLoading(true);
       const [classRes, teacherRes, userRes, yearRes, studentRes] = await Promise.all([
-        fetch(`${API_URL}/api/Class`),
-        fetch(`${API_URL}/api/Teacher`),
-        fetch(`${API_URL}/api/UserAccount/GetAllUserAccounts`),
-        fetch(`${API_URL}/api/SchoolYear`),
-        fetch(`${API_URL}/api/Student`)
+        fetch(`${API_URL}/api/classes`),
+        fetch(`${API_URL}/api/teachers`),
+        fetch(`${API_URL}/api/user-accounts`),
+        fetch(`${API_URL}/api/school-years`),
+        fetch(`${API_URL}/api/students`)
       ]);
       const classData = await classRes.json();
       const teacherData = await teacherRes.json();

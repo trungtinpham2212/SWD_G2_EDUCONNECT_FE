@@ -19,9 +19,9 @@ const SubjectManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
     try {
       setLoading(true);
       const [subjectRes, teacherRes, userRes] = await Promise.all([
-        fetch(`${API_URL}/api/Subject`),
-        fetch(`${API_URL}/api/Teacher`),
-        fetch(`${API_URL}/api/UserAccount/GetAllUserAccounts`)
+        fetch(`${API_URL}/api/subjects`),
+        fetch(`${API_URL}/api/teachers`),
+        fetch(`${API_URL}/api/user-accounts`)
       ]);
       const subjectData = await subjectRes.json();
       const teacherData = await teacherRes.json();
@@ -86,7 +86,7 @@ const SubjectManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
 
     try {
       if (editingSubject) {
-        const response = await fetch(`${API_URL}/api/Subject/${editingSubject.subjectid}`, {
+        const response = await fetch(`${API_URL}/api/subjects/${editingSubject.subjectid}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -105,7 +105,7 @@ const SubjectManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
           toast.error('Có lỗi xảy ra khi cập nhật môn học: ' + errorText);
         }
       } else {
-        const response = await fetch(`${API_URL}/api/Subject`, {
+        const response = await fetch(`${API_URL}/api/subjects`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -136,7 +136,7 @@ const SubjectManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
 
   const confirmDelete = async () => {
     try {
-      const response = await fetch(`${API_URL}/api/Subject/${subjectToDelete}`, {
+      const response = await fetch(`${API_URL}/api/subjects/${subjectToDelete}`, {
         method: 'DELETE'
       });
       if (response.ok) {

@@ -78,12 +78,12 @@ const SessionDetail = () => {
     const fetchSessionAndStudents = async () => {
       try {
         setLoading(true);
-        const sessionRes = await fetch(`${API_URL}/api/Period/${sessionid}`);
+        const sessionRes = await fetch(`${API_URL}/api/periods/${sessionid}`);
         if (!sessionRes.ok) throw new Error('Không thể tải dữ liệu buổi học');
         const sessionData = await sessionRes.json();
         setSessionInfo(sessionData);
 
-        const classRes = await fetch(`${API_URL}/api/Class`);
+        const classRes = await fetch(`${API_URL}/api/classes`);
         if (!classRes.ok) throw new Error('Không thể tải dữ liệu lớp');
         const classData = await classRes.json();
         const foundClass = classData.find(cls => cls.classid === sessionData.classid);
@@ -94,21 +94,21 @@ const SessionDetail = () => {
           return;
         }
 
-        const studentRes = await fetch(`${API_URL}/api/Student`);
+        const studentRes = await fetch(`${API_URL}/api/students`);
         const studentData = await studentRes.json();
         const filteredStudents = studentData.filter(stu => stu.classid === foundClass.classid);
         setStudents(filteredStudents);
 
-        const parentRes = await fetch(`${API_URL}/api/UserAccount/GetAllUserAccounts`);
+        const parentRes = await fetch(`${API_URL}/api/user-accounts`);
         const parentData = await parentRes.json();
         setParentAccounts(parentData);
 
-        const teacherRes = await fetch(`${API_URL}/api/Teacher`);
+        const teacherRes = await fetch(`${API_URL}/api/teachers`);
         const teacherData = await teacherRes.json();
         const teacher = teacherData.find(t => t.teacherid === foundClass.teacherhomeroomid);
         let name = 'Không rõ';
         if (teacher?.userid) {
-          const userRes = await fetch(`${API_URL}/api/UserAccount/GetUserAccount/${teacher.userid}`);
+          const userRes = await fetch(`${API_URL}/api/user-accounts/${teacher.userid}`);
           if (userRes.ok) {
             const userData = await userRes.json();
             name = userData.fullname || 'Không rõ';
@@ -130,7 +130,7 @@ const SessionDetail = () => {
   useEffect(() => {
     const fetchActivities = async () => {
       try {
-        const res = await fetch(`${API_URL}/api/Activity`);
+        const res = await fetch(`${API_URL}/api/activities`);
         const data = await res.json();
         setActivities(data);
       } catch (err) {
@@ -174,7 +174,7 @@ const SessionDetail = () => {
         createdat: createdAtStr
       };
 
-      const response = await fetch(`${API_URL}/api/Evaluation`, {
+      const response = await fetch(`${API_URL}/api/evaluations`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(evaluationData)

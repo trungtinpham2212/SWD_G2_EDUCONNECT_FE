@@ -32,9 +32,9 @@ const StudentAdmin = () => {
         try {
             setLoading(true);
             const [studentRes, classRes, parentRes] = await Promise.all([
-                fetch(`${API_URL}/api/Student`),
-                fetch(`${API_URL}/api/Class`),
-                fetch(`${API_URL}/api/UserAccount/GetAllUserAccounts`)
+                fetch(`${API_URL}/api/students`),
+                fetch(`${API_URL}/api/classes`),
+                fetch(`${API_URL}/api/user-accounts`)
             ]);
             const studentData = await studentRes.json();
             const classData = await classRes.json();
@@ -114,7 +114,7 @@ const StudentAdmin = () => {
         try {
             if (editingStudent) {
                 // Sửa học sinh
-                const response = await fetch(`${API_URL}/api/Student/${editingStudent.studentid}`, {
+                const response = await fetch(`${API_URL}/api/students/${editingStudent.studentid}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(form)
@@ -129,7 +129,7 @@ const StudentAdmin = () => {
                 }
             } else {
                 // Tạo mới
-                const response = await fetch(`${API_URL}/api/Student`, {
+                const response = await fetch(`${API_URL}/api/students`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(form)
@@ -155,7 +155,7 @@ const StudentAdmin = () => {
 
     const confirmDelete = async () => {
         try {
-            const response = await fetch(`${API_URL}/api/Student/${studentToDelete}`, {
+            const response = await fetch(`${API_URL}/api/students/${studentToDelete}`, {
                 method: 'DELETE'
             });
             if (response.ok) {
