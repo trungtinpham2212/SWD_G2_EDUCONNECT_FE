@@ -40,7 +40,7 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
         const [sectionRes, classRes, evalRes, activityRes] = await Promise.all([
           fetch(`${API_URL}/api/periods`, { headers }),
           fetch(`${API_URL}/api/classes`, { headers }),
-          fetch(`${API_URL}/api/evaluations`, { headers }),
+          fetch(`${API_URL}/api/evaluations/by-teacher/${user?.teacherId}`, { headers }),
           fetch(`${API_URL}/api/activities`, { headers })
         ]);
 
@@ -61,10 +61,8 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
         setClasses(classData);
         setActivities(activities);
 
-        // Chỉ lấy evaluation thuộc các section mà giáo viên này dạy
-        const mySectionIds = new Set(mySections.map(sec => Number(sec.periodid)));
-        const filteredEvaluations = evalData.filter(ev => mySectionIds.has(Number(ev.periodid)));
-        setEvaluations(filteredEvaluations);
+        // Không cần lọc lại evaluations nữa, backend đã trả về đúng
+        setEvaluations(evalData);
 
         setError(null);
       } catch (err) {
