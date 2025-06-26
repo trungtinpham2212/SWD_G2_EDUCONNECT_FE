@@ -38,9 +38,13 @@ const getMenuItems = (roleId) => {
         { name: "Học sinh", icon: <FaUserGraduate />, path: "/students" },
         { name: "Quản lý đánh giá", icon: <FaStar />, path: "/evaluations" },
         { name: "Báo cáo", icon: <FaChartBar />, path: "/teacher/reports" },
+        { name: "Cài đặt", icon: <FaCog />, path: "/teacher/settings" },
       ];
     case 3: // Phụ huynh
-      return baseItems;
+      return [
+        ...baseItems,
+        { name: "Cài đặt", icon: <FaCog />, path: "/parent/settings" },
+      ];
     default:
       return baseItems;
   }

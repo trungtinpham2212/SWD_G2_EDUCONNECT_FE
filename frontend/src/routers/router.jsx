@@ -22,6 +22,7 @@ import EvaluationAdmin from '../pages/Admin/EvaluationAdmin';
 import ReportAdmin from '../pages/Admin/ReportAdmin';
 import TeacherSetting from '../pages/Teacher/TeacherSetting';
 import ReportTeacher from '../pages/Teacher/ReportManagement';
+import ParentSetting from '../pages/Parent/ParentSetting';
 // Dynamic Dashboard component that renders based on user role
 const DynamicDashboard = ({ user, ...props }) => {
   if (!user) return null;
@@ -171,6 +172,22 @@ export const createRoutes = ({ user, active, setActive, isSidebarOpen, setSideba
       element: <ProtectedLayout 
         element={AdminSetting}
         allowedRoles={[1]}
+        {...commonProps}
+      />
+    },
+    {
+      path: "/teacher/settings",
+      element: <ProtectedLayout 
+        element={TeacherSetting}
+        allowedRoles={[2]}
+        {...commonProps}
+      />
+    },
+    {
+      path: "/parent/settings",
+      element: <ProtectedLayout 
+        element={ParentSetting}
+        allowedRoles={[3]}
         {...commonProps}
       />
     },

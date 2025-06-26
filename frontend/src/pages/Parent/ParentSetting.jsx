@@ -4,7 +4,7 @@ import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { FaSave, FaCloudUploadAlt, FaEye, FaEyeSlash } from 'react-icons/fa';
 
-const TeacherSetting = ({ user }) => {
+const ParentSetting = ({ user }) => {
   const [avatarUrl, setAvatarUrl] = useState('');
   const [avatarFile, setAvatarFile] = useState(null);
   const [uploading, setUploading] = useState(false);
@@ -184,7 +184,7 @@ const TeacherSetting = ({ user }) => {
 
   return (
     <div className="flex-1 p-6">
-      <h2 className="text-2xl font-semibold mb-6">Cài đặt giáo viên</h2>
+      <h2 className="text-2xl font-semibold mb-6">Cài đặt phụ huynh</h2>
       <div className="bg-white rounded-lg shadow-md p-6">
         <h3 className="text-lg font-medium mb-4">Chỉnh sửa thông tin cá nhân</h3>
         {loadingProfile ? (
@@ -439,4 +439,4 @@ const TeacherSetting = ({ user }) => {
   );
 };
 
-export default TeacherSetting;
+export default ParentSetting;
