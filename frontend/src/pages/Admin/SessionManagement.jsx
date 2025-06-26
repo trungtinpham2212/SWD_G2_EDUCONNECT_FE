@@ -14,9 +14,9 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
   const [schoolYears, setSchoolYears] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [selectedWeek, setSelectedWeek] = useState('');
+  const [selectedWeek, setSelectedWeek] = useState(null);
   const [selectedClass, setSelectedClass] = useState('all'); // 'all' hoặc classId
-  const [selectedSchoolYear, setSelectedSchoolYear] = useState('');
+  const [selectedSchoolYear, setSelectedSchoolYear] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [selectedCell, setSelectedCell] = useState(null);
   const [isEditMode, setIsEditMode] = useState(false);
@@ -27,6 +27,9 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
     teacherid: ''
   });
   const [students, setStudents] = useState([]);
+  const [weeks, setWeeks] = useState([]);
+  const [periodsLoading, setPeriodsLoading] = useState(false);
+  const [periodsError, setPeriodsError] = useState(null);
 
   // Define time slots for each period
   const timeSlots = [
@@ -40,45 +43,31 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
     { period: 8, start: '16:00', end: '16:45' }
   ];
 
-  // Tạo danh sách các tuần trong năm học
-  const weeks = useMemo(() => {
-    if (!selectedSchoolYear) return [];
-    
-    const schoolYear = schoolYears.find(sy => sy.schoolyearid === Number(selectedSchoolYear));
-    if (!schoolYear) return [];
-    
-    // Parse school year (e.g., "2024-2025")
-    const yearParts = schoolYear.year.split('-');
-    if (yearParts.length !== 2) return [];
-    
-    const startYear = parseInt(yearParts[0]);
-    const endYear = parseInt(yearParts[1]);
-    
+  // Helper: sinh danh sách tuần cho 1 năm học
+  function generateWeeksForSchoolYear(schoolYear) {
+    if (!schoolYear?.year) return [];
+    const [startYear, endYear] = schoolYear.year.split('-').map(Number);
+    const startDate = new Date(`${startYear}-09-02`); // 2/9
+    const endDate = new Date(`${endYear}-05-31`); // cuối tháng 5
     const weeks = [];
-    // Bắt đầu từ tháng 9 năm đầu tiên
-    const startDate = new Date(`${startYear}-09-02`);
-    // Kết thúc tháng 5 năm thứ hai
-    const endDate = new Date(`${endYear}-05-30`);
-    
-    let currentDate = new Date(startDate);
+    let current = new Date(startDate);
     let weekNumber = 1;
-    
-    while (currentDate <= endDate) {
-      const weekStart = new Date(currentDate);
-      const weekEnd = new Date(currentDate);
+    while (current <= endDate) {
+      const weekStart = new Date(current);
+      const weekEnd = new Date(current);
       weekEnd.setDate(weekEnd.getDate() + 6);
-      
-      const weekLabel = `Tuần ${weekNumber} (${weekStart.toLocaleDateString('vi-VN')} - ${weekEnd.toLocaleDateString('vi-VN')})`;
-      const weekValue = weekStart.toISOString().split('T')[0];
-      
-      weeks.push({ label: weekLabel, value: weekValue });
-      
-      currentDate.setDate(currentDate.getDate() + 7);
+      const label = `Tuần ${weekNumber} (${weekStart.toLocaleDateString('vi-VN')} - ${weekEnd.toLocaleDateString('vi-VN')})`;
+      weeks.push({
+        label,
+        start: weekStart.toISOString().split('T')[0],
+        end: weekEnd.toISOString().split('T')[0],
+        weekNumber
+      });
+      current.setDate(current.getDate() + 7);
       weekNumber++;
     }
-    
     return weeks;
-  }, [selectedSchoolYear, schoolYears]);
+  }
 
   // Cache cho dữ liệu
   const subjectsMap = useMemo(() => {
@@ -198,93 +187,127 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
     return evaluation.students.map(student => student.name || `Học sinh ${student.studentid}`).join(', ');
   }, [evaluations]);
 
+  // Fetch static data (classes, subjects, teachers, userAccounts, activities, students) only once
   useEffect(() => {
-    const fetchData = async () => {
+    const fetchStaticData = async () => {
       try {
         setLoading(true);
-        const [sectionRes, subjectRes, classRes, teacherRes, userRes, evalRes, activityRes, schoolYearRes, studentRes] = await Promise.all([
-          fetch(`${API_URL}/api/periods`),
+        const [subjectRes, classRes, teacherRes, userRes, activityRes, schoolYearRes, studentRes] = await Promise.all([
           fetch(`${API_URL}/api/subjects`),
           fetch(`${API_URL}/api/classes`),
           fetch(`${API_URL}/api/teachers`),
           fetch(`${API_URL}/api/user-accounts`),
-          fetch(`${API_URL}/api/evaluations`),
           fetch(`${API_URL}/api/activities`),
           fetch(`${API_URL}/api/school-years`),
           fetch(`${API_URL}/api/students`)
         ]);
-
-        if (!sectionRes.ok || !subjectRes.ok || !classRes.ok || !teacherRes.ok || !userRes.ok || !evalRes.ok || !activityRes.ok || !schoolYearRes.ok || !studentRes.ok) {
+        if (!subjectRes.ok || !classRes.ok || !teacherRes.ok || !userRes.ok || !activityRes.ok || !schoolYearRes.ok || !studentRes.ok) {
           throw new Error('Một hoặc nhiều API call thất bại');
         }
-
-        const [sectionData, subjectData, classData, teacherData, userData, evalData, activityData, schoolYearData, studentData] = await Promise.all([
-          sectionRes.json(),
+        const [subjectData, classData, teacherData, userData, activityData, schoolYearData, studentData] = await Promise.all([
           subjectRes.json(),
           classRes.json(),
           teacherRes.json(),
           userRes.json(),
-          evalRes.json(),
           activityRes.json(),
           schoolYearRes.json(),
           studentRes.json()
         ]);
-
-        // Chuẩn hóa dữ liệu sections
-        const normalizedSections = sectionData.map(section => ({
-          ...section,
-          // Đảm bảo các ID là số
-          classid: Number(section.classid),
-          subjectid: Number(section.subjectid),
-          teacherid: Number(section.teacherid),
-          period: Number(section.periodno || section.period), // Hỗ trợ cả 2 trường hợp
-          // Chuẩn hóa ngày
-          perioddate: section.perioddate.includes('T') 
-            ? section.perioddate.split('T')[0] 
-            : section.perioddate
-        }));
-
-        setSections(normalizedSections);
         setSubjects(subjectData);
         setClasses(classData);
         setTeachers(teacherData);
         setUserAccounts(userData);
-        setEvaluations(evalData);
         setActivities(activityData);
         setSchoolYears(schoolYearData);
         setStudents(studentData);
         setError(null);
+        // Mặc định chọn năm học chứa ngày 2/12/2024
+        const defaultDate = new Date('2024-12-02');
+        let foundYear = schoolYearData.find(sy => {
+          const [startYear, endYear] = sy.year.split('-').map(Number);
+          const start = new Date(`${startYear}-09-02`);
+          const end = new Date(`${endYear}-05-31`);
+          return defaultDate >= start && defaultDate <= end;
+        });
+        if (!foundYear && schoolYearData.length > 0) foundYear = schoolYearData[0];
+        setSelectedSchoolYear(foundYear?.schoolyearid || null);
       } catch (err) {
-        console.error('Error fetching data:', err);
-        setError('Không thể tải dữ liệu tiết học. Vui lòng thử lại sau.');
+        setError('Không thể tải dữ liệu. Vui lòng thử lại sau.');
       } finally {
         setLoading(false);
       }
     };
-    fetchData();
+    fetchStaticData();
   }, []);
 
-  // Tự động chọn tuần hiện tại
+  // Khi chọn năm học, sinh lại danh sách tuần
   useEffect(() => {
-    if (weeks.length > 0 && selectedSchoolYear) {
-      // Find the week containing December 2, 2024 for the selected school year
-      const defaultWeek = weeks.find(week => {
-        const weekStart = new Date(week.value);
-        const weekEnd = new Date(weekStart);
-        weekEnd.setDate(weekEnd.getDate() + 6);
-        const targetDate = new Date('2024-12-02');
-        return weekStart <= targetDate && weekEnd >= targetDate;
-      });
-      setSelectedWeek(defaultWeek ? defaultWeek.value : weeks[0].value);
-    }
-  }, [weeks, selectedSchoolYear]);
+    if (!selectedSchoolYear || !schoolYears.length) return;
+    const sy = schoolYears.find(sy => sy.schoolyearid === selectedSchoolYear);
+    const genWeeks = generateWeeksForSchoolYear(sy);
+    setWeeks(genWeeks);
+    // Mặc định chọn tuần chứa 2/12/2024 nếu có, không thì tuần đầu tiên
+    const defaultDate = new Date('2024-12-02');
+    let foundWeek = genWeeks.find(w => {
+      const start = new Date(w.start);
+      const end = new Date(w.end);
+      return defaultDate >= start && defaultDate <= end;
+    });
+    if (!foundWeek && genWeeks.length > 0) foundWeek = genWeeks[0];
+    setSelectedWeek(foundWeek || null);
+  }, [selectedSchoolYear, schoolYears]);
 
-  // Tự động chọn năm học 2024-2025 (index 1 trong mảng SchoolYears)
+  // Fetch periods và evaluations theo tuần và lớp (by-range-class)
   useEffect(() => {
-    if (schoolYears.length > 0 && !selectedSchoolYear) {
-      setSelectedSchoolYear(schoolYears[1].schoolyearid);
-    }
-  }, [schoolYears, selectedSchoolYear]);
+    if (!selectedWeek) return;
+    const fetchPeriodsAndEvaluations = async () => {
+      try {
+        setPeriodsLoading(true);
+        setPeriodsError(null);
+        let allSections = [];
+        if (selectedClass === 'all') {
+          // Gọi cho từng classId
+          const promises = classes.map(cls =>
+            fetch(`${API_URL}/api/periods/by-range-class?startDate=${selectedWeek.start}&endDate=${selectedWeek.end}&classId=${cls.classid}`)
+          );
+          const results = await Promise.all(promises);
+          const jsons = await Promise.all(results.map(r => r.ok ? r.json() : []));
+          allSections = jsons.flat();
+        } else {
+          const res = await fetch(`${API_URL}/api/periods/by-range-class?startDate=${selectedWeek.start}&endDate=${selectedWeek.end}&classId=${selectedClass}`);
+          if (!res.ok) throw new Error('Không thể tải dữ liệu tiết học');
+          allSections = await res.json();
+        }
+        // Chuẩn hóa dữ liệu sections
+        const normalizedSections = allSections.map(section => ({
+          ...section,
+          classid: Number(section.classid),
+          subjectid: Number(section.subjectid),
+          teacherid: Number(section.teacherid),
+          period: Number(section.periodno || section.period),
+          perioddate: section.perioddate.includes('T') 
+            ? section.perioddate.split('T')[0] 
+            : section.perioddate
+        }));
+        setSections(normalizedSections);
+        // Fetch evaluations theo tuần
+        const evalRes = await fetch(`${API_URL}/api/evaluations/by-date-range?startDate=${selectedWeek.start}&endDate=${selectedWeek.end}`);
+        if (evalRes.ok) {
+          const evalData = await evalRes.json();
+          setEvaluations(evalData);
+        } else {
+          setEvaluations([]);
+        }
+      } catch (err) {
+        setSections([]);
+        setEvaluations([]);
+        setPeriodsError('Không thể tải dữ liệu tiết học cho tuần này.');
+      } finally {
+        setPeriodsLoading(false);
+      }
+    };
+    fetchPeriodsAndEvaluations();
+  }, [selectedWeek, selectedClass, classes]);
 
   const getSubjectName = useCallback((subjectid) => {
     return subjectsMap[subjectid] || '-';
@@ -582,60 +605,52 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
       <h2 className="text-2xl font-semibold mb-6">Quản lý tiết học</h2>
       
       <div className="bg-white rounded-lg shadow-md p-6">
-        {/* Chọn tuần và lớp */}
-        <div className="mb-6 flex gap-4">
-          <div className="flex-1">
-            <label className="block text-sm font-medium text-gray-700 mb-2">Chọn tuần:</label>
-            <select
-              value={selectedWeek}
-              onChange={(e) => setSelectedWeek(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              {weeks.map(week => (
-                <option key={week.value} value={week.value}>
-                  {week.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="flex-1">
-            <label className="block text-sm font-medium text-gray-700 mb-2">Chọn lớp:</label>
-            <select
-              value={selectedClass}
-              onChange={(e) => setSelectedClass(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="all">Tất cả các lớp</option>
-              {classes.map(cls => (
-                <option key={cls.classid} value={cls.classid}>
-                  {cls.classname}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="flex-1">
-            <label className="block text-sm font-medium text-gray-700 mb-2">Chọn năm học:</label>
-            <select
-              value={selectedSchoolYear}
-              onChange={(e) => setSelectedSchoolYear(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              {schoolYears.map(schoolYear => (
-                <option key={schoolYear.schoolyearid} value={schoolYear.schoolyearid}>
-                  {schoolYear.year}
-                </option>
-              ))}
-            </select>
-          </div>
+        {/* Chọn năm học, tuần, lớp */}
+        <div className="mb-6 flex flex-col md:flex-row gap-4 items-center">
+          <label className="block text-sm font-medium text-gray-700">Chọn năm học:</label>
+          <select
+            value={selectedSchoolYear || ''}
+            onChange={e => setSelectedSchoolYear(Number(e.target.value))}
+            className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            {schoolYears.map(sy => (
+              <option key={sy.schoolyearid} value={sy.schoolyearid}>{sy.year}</option>
+            ))}
+          </select>
+          <label className="block text-sm font-medium text-gray-700">Chọn tuần:</label>
+          <select
+            value={selectedWeek?.start || ''}
+            onChange={e => {
+              const week = weeks.find(w => w.start === e.target.value);
+              setSelectedWeek(week || null);
+            }}
+            className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            disabled={!weeks.length}
+          >
+            {weeks.map(week => (
+              <option key={week.start} value={week.start}>{week.label}</option>
+            ))}
+          </select>
+          <label className="block text-sm font-medium text-gray-700">Chọn lớp:</label>
+          <select
+            value={selectedClass}
+            onChange={(e) => setSelectedClass(e.target.value)}
+            className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="all">Tất cả các lớp</option>
+            {classes.map(cls => (
+              <option key={cls.classid} value={cls.classid}>{cls.classname}</option>
+            ))}
+          </select>
         </div>
 
-        {loading ? (
+        {periodsLoading ? (
           <div className="text-center py-8">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
             <p className="mt-4 text-gray-600">Đang tải dữ liệu...</p>
           </div>
-        ) : error ? (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-600">{error}</div>
+        ) : periodsError ? (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-600">{periodsError}</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full border border-gray-300">
@@ -644,12 +659,23 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
                   <th className="border border-gray-300 px-4 py-2 text-left text-sm font-medium text-gray-700 min-w-[150px]">
                     Tiết
                   </th>
-                  {weekDates.map((date, index) => (
-                    <th key={index} className="border border-gray-300 px-4 py-2 text-center text-sm font-medium text-gray-700 min-w-[120px]">
-                      <div>{getDayOfWeek(date)}</div>
-                      <div className="text-xs text-gray-500">{date.toLocaleDateString('vi-VN')}</div>
-                    </th>
-                  ))}
+                  {(() => {
+                    // Tạo mảng ngày trong tuần từ selectedWeek
+                    if (!selectedWeek) return null;
+                    const weekStart = new Date(selectedWeek.start);
+                    const weekDates = [];
+                    for (let i = 0; i < 7; i++) {
+                      const d = new Date(weekStart);
+                      d.setDate(weekStart.getDate() + i);
+                      weekDates.push(d);
+                    }
+                    return weekDates.map((date, index) => (
+                      <th key={index} className="border border-gray-300 px-4 py-2 text-center text-sm font-medium text-gray-700 min-w-[120px]">
+                        <div>{getDayOfWeek(date)}</div>
+                        <div className="text-xs text-gray-500">{date.toLocaleDateString('vi-VN')}</div>
+                      </th>
+                    ));
+                  })()}
                 </tr>
               </thead>
               <tbody>
@@ -661,20 +687,31 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
                         {slot.start} - {slot.end}
                       </div>
                     </td>
-                    {weekDates.map((date, dateIndex) => (
-                      <td key={dateIndex} className="border border-gray-300 p-0">
-                        <div className="grid grid-cols-1">
-                          {displayClasses.map(cls => (
-                            <div key={cls.classid} className="border-b border-gray-200 last:border-b-0">
-                              <div className="text-xs text-gray-500 px-2 py-1 bg-gray-50">
-                                {cls.classname}
+                    {(() => {
+                      // Tạo mảng ngày trong tuần từ selectedWeek
+                      if (!selectedWeek) return null;
+                      const weekStart = new Date(selectedWeek.start);
+                      const weekDates = [];
+                      for (let i = 0; i < 7; i++) {
+                        const d = new Date(weekStart);
+                        d.setDate(weekStart.getDate() + i);
+                        weekDates.push(d);
+                      }
+                      return weekDates.map((date, dateIndex) => (
+                        <td key={dateIndex} className="border border-gray-300 p-0">
+                          <div className="grid grid-cols-1">
+                            {displayClasses.map(cls => (
+                              <div key={cls.classid} className="border-b border-gray-200 last:border-b-0">
+                                <div className="text-xs text-gray-500 px-2 py-1 bg-gray-50">
+                                  {cls.classname}
+                                </div>
+                                {renderCell(cls.classid, slot.period, date)}
                               </div>
-                              {renderCell(cls.classid, slot.period, date)}
-                            </div>
-                          ))}
-                        </div>
-                      </td>
-                    ))}
+                            ))}
+                          </div>
+                        </td>
+                      ));
+                    })()}
                   </tr>
                 ))}
               </tbody>

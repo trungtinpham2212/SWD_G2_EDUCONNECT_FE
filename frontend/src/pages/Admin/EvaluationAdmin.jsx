@@ -5,6 +5,50 @@ import 'react-toastify/dist/ReactToastify.css';
 
 const ITEMS_PER_PAGE = 15;
 
+// Helper: lấy ngày đầu tuần (thứ 2) và cuối tuần (chủ nhật) từ 1 ngày bất kỳ
+function getWeekRange(date) {
+  const d = new Date(date);
+  const day = d.getDay();
+  // Thứ 2 là 1, chủ nhật là 0
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  const monday = new Date(d);
+  monday.setDate(d.getDate() + diffToMonday);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  return [monday, sunday];
+}
+
+// Helper: format yyyy-mm-dd
+function formatDate(date) {
+  return date.toISOString().split('T')[0];
+}
+
+// Helper: sinh danh sách tuần cho 1 năm học
+function generateWeeksForSchoolYear(schoolYear) {
+  if (!schoolYear?.year) return [];
+  const [startYear, endYear] = schoolYear.year.split('-').map(Number);
+  const startDate = new Date(`${startYear}-09-02`); // 2/9
+  const endDate = new Date(`${endYear}-05-31`); // cuối tháng 5
+  const weeks = [];
+  let current = new Date(startDate);
+  let weekNumber = 1;
+  while (current <= endDate) {
+    const weekStart = new Date(current);
+    const weekEnd = new Date(current);
+    weekEnd.setDate(weekEnd.getDate() + 6);
+    const label = `Tuần ${weekNumber} (${weekStart.toLocaleDateString('vi-VN')} - ${weekEnd.toLocaleDateString('vi-VN')})`;
+    weeks.push({
+      label,
+      start: weekStart.toISOString().split('T')[0],
+      end: weekEnd.toISOString().split('T')[0],
+      weekNumber
+    });
+    current.setDate(current.getDate() + 7);
+    weekNumber++;
+  }
+  return weeks;
+}
+
 const EvaluationAdmin = () => {
   const [evaluations, setEvaluations] = useState([]);
   const [sections, setSections] = useState([]);
@@ -25,6 +69,12 @@ const EvaluationAdmin = () => {
   const [selectedClass, setSelectedClass] = useState('all');
   const [selectedTeacher, setSelectedTeacher] = useState('all');
   const [selectedType, setSelectedType] = useState('all'); // 'all', 'positive', 'negative'
+
+  // State năm học và tuần đang chọn
+  const [schoolYears, setSchoolYears] = useState([]);
+  const [selectedSchoolYear, setSelectedSchoolYear] = useState(null);
+  const [weeks, setWeeks] = useState([]);
+  const [selectedWeek, setSelectedWeek] = useState(null);
 
   // Cache danh sách giáo viên có đánh giá
   const teachersWithEvaluations = useMemo(() => {
@@ -64,55 +114,131 @@ const EvaluationAdmin = () => {
     });
   }, [evaluations, sections, classes]);
 
+  // Fetch school years on mount
   useEffect(() => {
+    const fetchSchoolYears = async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/school-years`);
+        const data = await res.json();
+        setSchoolYears(data);
+        // Mặc định chọn năm học chứa ngày 2/12/2024
+        const defaultDate = new Date('2024-12-02');
+        let foundYear = data.find(sy => {
+          const [startYear, endYear] = sy.year.split('-').map(Number);
+          const start = new Date(`${startYear}-09-02`);
+          const end = new Date(`${endYear}-05-31`);
+          return defaultDate >= start && defaultDate <= end;
+        });
+        if (!foundYear && data.length > 0) foundYear = data[0];
+        setSelectedSchoolYear(foundYear?.schoolyearid || null);
+      } catch (err) {
+        setSchoolYears([]);
+      }
+    };
+    fetchSchoolYears();
+  }, []);
+
+  // Khi chọn năm học, sinh lại danh sách tuần
+  useEffect(() => {
+    if (!selectedSchoolYear || !schoolYears.length) return;
+    const sy = schoolYears.find(sy => sy.schoolyearid === selectedSchoolYear);
+    const genWeeks = generateWeeksForSchoolYear(sy);
+    setWeeks(genWeeks);
+    // Mặc định chọn tuần chứa 2/12/2024 nếu có, không thì tuần đầu tiên
+    const defaultDate = new Date('2024-12-02');
+    let foundWeek = genWeeks.find(w => {
+      const start = new Date(w.start);
+      const end = new Date(w.end);
+      return defaultDate >= start && defaultDate <= end;
+    });
+    if (!foundWeek && genWeeks.length > 0) foundWeek = genWeeks[0];
+    setSelectedWeek(foundWeek || null);
+  }, [selectedSchoolYear, schoolYears]);
+
+  // Fetch evaluations theo tuần
+  useEffect(() => {
+    if (!selectedWeek) return;
     const fetchData = async () => {
       try {
         setLoading(true);
-        
+        setError(null);
         const headers = {
           'Accept': 'application/json',
           'Content-Type': 'application/json'
         };
-
-        // Thêm fetch activities
-        const [evalRes, sectionRes, classRes, teacherRes, userRes, activityRes] = await Promise.all([
-          fetch(`${API_URL}/api/evaluations`, { headers }),
+        // Lấy evaluations theo tuần
+        const evalRes = await fetch(`${API_URL}/api/evaluations/by-date-range?startDate=${selectedWeek.start}&endDate=${selectedWeek.end}`, { headers });
+        let evalData = [];
+        let noData = false;
+        if (evalRes.ok) {
+          let json;
+          try {
+            json = await evalRes.json();
+          } catch {
+            // Nếu không parse được json, thử lấy text
+            const text = await evalRes.text();
+            if (typeof text === 'string' && text.toLowerCase().includes('no evaluations found')) {
+              evalData = [];
+              noData = true;
+            } else {
+              evalData = [];
+            }
+            json = null;
+          }
+          if (json) {
+            if (Array.isArray(json)) {
+              evalData = json;
+            } else if (typeof json === 'object' && json.message && json.message.toLowerCase().includes('no evaluations found')) {
+              evalData = [];
+              noData = true;
+            } else {
+              evalData = [];
+            }
+          }
+        } else {
+          // Nếu status 404 hoặc 200 nhưng trả về text "No evaluations found ..."
+          const text = await evalRes.text();
+          if (typeof text === 'string' && text.toLowerCase().includes('no evaluations found')) {
+            evalData = [];
+            noData = true;
+          } else {
+            throw new Error('Một hoặc nhiều API call thất bại');
+          }
+        }
+        const [sectionRes, classRes, teacherRes, userRes, activityRes] = await Promise.all([
           fetch(`${API_URL}/api/periods`, { headers }),
           fetch(`${API_URL}/api/classes`, { headers }),
           fetch(`${API_URL}/api/teachers`, { headers }),
           fetch(`${API_URL}/api/user-accounts`, { headers }),
           fetch(`${API_URL}/api/activities`, { headers })
         ]);
-
-        if (!evalRes.ok || !sectionRes.ok || !classRes.ok || !teacherRes.ok || !userRes.ok || !activityRes.ok) {
+        if (!sectionRes.ok || !classRes.ok || !teacherRes.ok || !userRes.ok || !activityRes.ok) {
           throw new Error('Một hoặc nhiều API call thất bại');
         }
-
-        const [evalData, sections, classes, teachers, users, activities] = await Promise.all([
-          evalRes.json(),
+        const [sections, classes, teachers, users, activities] = await Promise.all([
           sectionRes.json(),
           classRes.json(),
           teacherRes.json(),
           userRes.json(),
           activityRes.json()
         ]);
-
         setSections(sections);
         setClasses(classes);
         setTeachers(teachers);
         setUserAccounts(users);
         setEvaluations(evalData);
         setActivities(activities);
-        setError(null);
+        if (noData) setError('nodata');
+        else setError(null);
       } catch (err) {
-        console.error('Error in fetchData:', err);
+        setEvaluations([]);
         setError('Không thể tải dữ liệu đánh giá. Vui lòng thử lại sau.');
       } finally {
         setLoading(false);
       }
     };
     fetchData();
-  }, []);
+  }, [selectedWeek]);
 
   const getSectionInfo = (periodid) => sections.find(sec => Number(sec.periodid) === Number(periodid));
   const getClassName = (classid) => {
@@ -224,10 +350,12 @@ const EvaluationAdmin = () => {
   };
 
   const totalPages = Math.ceil(filteredAndSortedEvaluations.length / ITEMS_PER_PAGE);
-  const paginatedEvaluations = filteredAndSortedEvaluations.slice(
-    (currentPage - 1) * ITEMS_PER_PAGE,
-    currentPage * ITEMS_PER_PAGE
-  );
+  const paginatedEvaluations = useMemo(() => {
+    return filteredAndSortedEvaluations.slice(
+      (currentPage - 1) * ITEMS_PER_PAGE,
+      currentPage * ITEMS_PER_PAGE
+    );
+  }, [filteredAndSortedEvaluations, currentPage]);
 
   // Reset trang khi thay đổi filter
   useEffect(() => {
@@ -244,6 +372,33 @@ const EvaluationAdmin = () => {
     <div className="flex-1 p-6">
       <h2 className="text-2xl font-semibold mb-6">Quản lý đánh giá</h2>
       <div className="bg-white rounded-lg shadow-md p-6">
+        {/* Chọn năm học và tuần */}
+        <div className="mb-6 flex flex-col md:flex-row gap-4 items-center">
+          <label className="block text-sm font-medium text-gray-700">Chọn năm học:</label>
+          <select
+            value={selectedSchoolYear || ''}
+            onChange={e => setSelectedSchoolYear(Number(e.target.value))}
+            className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            {schoolYears.map(sy => (
+              <option key={sy.schoolyearid} value={sy.schoolyearid}>{sy.year}</option>
+            ))}
+          </select>
+          <label className="block text-sm font-medium text-gray-700">Chọn tuần:</label>
+          <select
+            value={selectedWeek?.start || ''}
+            onChange={e => {
+              const week = weeks.find(w => w.start === e.target.value);
+              setSelectedWeek(week || null);
+            }}
+            className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            disabled={!weeks.length}
+          >
+            {weeks.map(week => (
+              <option key={week.start} value={week.start}>{week.label}</option>
+            ))}
+          </select>
+        </div>
         {/* Thêm phần filter */}
         <div className="mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
@@ -291,8 +446,10 @@ const EvaluationAdmin = () => {
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
             <p className="mt-4 text-gray-600">Đang tải danh sách đánh giá...</p>
           </div>
-        ) : error ? (
+        ) : (error && error !== 'nodata') ? (
           <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-600">{error}</div>
+        ) : (!loading && (error === 'nodata' || (evaluations.length === 0 && !error))) ? (
+          <div className="text-gray-500">Không có đánh giá trong khoảng thời gian này.</div>
         ) : filteredAndSortedEvaluations.length === 0 ? (
           <div className="text-gray-500">Không có đánh giá nào phù hợp với bộ lọc.</div>
         ) : (
