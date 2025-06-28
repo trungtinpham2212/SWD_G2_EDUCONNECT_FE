@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { FaTachometerAlt, FaChalkboardTeacher, FaUserFriends, FaUserGraduate, FaChartBar, FaCog, FaBars, FaSignOutAlt, FaCalendarAlt, FaHistory, FaCaretDown, FaUserCog, FaCalendar, FaBook, FaChalkboard, FaClock, FaStar } from "react-icons/fa";
+import { FaTachometerAlt, FaChalkboardTeacher, FaUserFriends, FaUserGraduate, FaChartBar, FaCog, FaBars, FaSignOutAlt, FaCalendarAlt, FaHistory, FaCaretDown, FaUserCog, FaCalendar, FaBook, FaChalkboard, FaClock, FaStar, FaComments } from "react-icons/fa";
 import { useNavigate, useLocation } from "react-router-dom";
 import API_URL from '../config/api';
 
@@ -43,6 +43,7 @@ const getMenuItems = (roleId) => {
     case 3: // Phụ huynh
       return [
         ...baseItems,
+        { name: "Trợ lý AI", icon: <FaComments />, path: "/chatbot" },
         { name: "Cài đặt", icon: <FaCog />, path: "/parent/settings" },
       ];
     default:

@@ -23,6 +23,7 @@ import ReportAdmin from '../pages/Admin/ReportAdmin';
 import TeacherSetting from '../pages/Teacher/TeacherSetting';
 import ReportTeacher from '../pages/Teacher/ReportManagement';
 import ParentSetting from '../pages/Parent/ParentSetting';
+import Chatbot from '../pages/Parent/Chatbot';
 // Dynamic Dashboard component that renders based on user role
 const DynamicDashboard = ({ user, ...props }) => {
   if (!user) return null;
@@ -50,15 +51,19 @@ const ProtectedLayout = ({ element: Component, allowedRoles, user, ...props }) =
   }
 
   return (
-    <div className="flex bg-gray-100 min-h-screen">
-      <Sidebar
-        active={props.active}
-        setActive={props.setActive}
-        isOpen={props.isSidebarOpen}
-        setIsOpen={props.setSidebarOpen}
-        user={user}
-      />
-      <Component {...props} user={user} />
+    <div className="flex h-screen bg-gray-100">
+      <div className="flex-shrink-0">
+        <Sidebar
+          active={props.active}
+          setActive={props.setActive}
+          isOpen={props.isSidebarOpen}
+          setIsOpen={props.setSidebarOpen}
+          user={user}
+        />
+      </div>
+      <div className="flex-1 flex flex-col h-screen min-w-0">
+        <Component {...props} user={user} />
+      </div>
     </div>
   );
 };
@@ -244,6 +249,14 @@ export const createRoutes = ({ user, active, setActive, isSidebarOpen, setSideba
       element: <ProtectedLayout 
         element={ReportTeacher}
         allowedRoles={[2]}
+        {...commonProps}
+      />
+    },
+    {
+      path: "/chatbot",
+      element: <ProtectedLayout 
+        element={Chatbot}
+        allowedRoles={[3]}
         {...commonProps}
       />
     },
