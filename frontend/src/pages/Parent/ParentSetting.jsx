@@ -30,6 +30,7 @@ const ParentSetting = ({ user }) => {
   });
   const [isEditing, setIsEditing] = useState(false);
   const [initialProfileForm, setInitialProfileForm] = useState(null);
+  const [avatarRemoved, setAvatarRemoved] = useState(false);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -49,6 +50,7 @@ const ParentSetting = ({ user }) => {
           avatarurl: data.avatarurl || ''
         });
         setAvatarUrl(data.avatarurl || '');
+        setAvatarRemoved(false);
       } catch (err) {
         toast.error('Không lấy được thông tin cá nhân');
       } finally {
@@ -103,8 +105,10 @@ const ParentSetting = ({ user }) => {
       formData.append('username', profileForm.username);
       if (avatarFile) {
         formData.append('avatarFile', avatarFile);
-      } else if (avatarUrl) {
+      } else if (avatarUrl && avatarUrl !== '') {
         formData.append('avatarurl', avatarUrl);
+      } else {
+        formData.append('removeAvatar', 'true');
       }
       formData.append('password', '');
       const response = await fetch(`${API_URL}/api/user-accounts/${user.userId}`, {
@@ -114,9 +118,17 @@ const ParentSetting = ({ user }) => {
       let text = await response.text();
       const normalized = text.replace(/"/g, '').trim();
       if (response.ok || normalized.toLowerCase().includes('success') || normalized.includes('Update successful')) {
-        toast.success('Cập nhật thông tin cá nhân thành công!');
+        let newAvatarUrl = '';
+        try {
+          const json = JSON.parse(text);
+          newAvatarUrl = json?.user?.avatarUrl || '';
+        } catch {}
+        setAvatarUrl(newAvatarUrl);
         setProfileForm(prev => ({ ...prev, currentPassword: '', password: '', confirmPassword: '' }));
         setShowChangePasswordModal(false);
+        setIsEditing(false);
+        setAvatarFile(null);
+        setAvatarRemoved(false);
       } else {
         toast.error('Lỗi khi cập nhật: ' + normalized);
       }
@@ -195,7 +207,8 @@ const ParentSetting = ({ user }) => {
     profileForm.email !== initialProfileForm.email ||
     profileForm.phonenumber !== initialProfileForm.phonenumber ||
     profileForm.address !== initialProfileForm.address ||
-    avatarFile
+    avatarFile ||
+    avatarRemoved
   );
 
   return (
@@ -223,13 +236,29 @@ const ParentSetting = ({ user }) => {
               <div className="flex flex-col items-center">
                 <div className="relative">
                   {avatarUrl ? (
-                    <img
-                      src={avatarUrl}
-                      alt="avatar"
-                      className={`w-32 h-32 rounded-full object-cover border-4 border-blue-200 shadow mb-2 transition-all ${uploading ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
-                      onClick={isEditing && !uploading ? handleAvatarClick : undefined}
-                      style={{ pointerEvents: isEditing && !uploading ? 'auto' : 'none' }}
-                    />
+                    <div className="relative">
+                      <img
+                        src={avatarUrl}
+                        alt="avatar"
+                        className={`w-32 h-32 rounded-full object-cover border-4 border-blue-200 shadow mb-2 transition-all ${uploading ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
+                        onClick={isEditing && !uploading ? handleAvatarClick : undefined}
+                        style={{ pointerEvents: isEditing && !uploading ? 'auto' : 'none' }}
+                      />
+                      {isEditing && !uploading && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAvatarUrl('');
+                            setAvatarFile(null);
+                            setAvatarRemoved(true);
+                          }}
+                          className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors duration-200"
+                          title="Xóa ảnh đại diện"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
                   ) : (
                     <div
                       className={`w-32 h-32 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 border-2 border-dashed border-blue-300 mb-2 ${uploading ? 'opacity-60 cursor-not-allowed' : isEditing ? 'cursor-pointer hover:bg-blue-50' : ''}`}
@@ -336,7 +365,12 @@ const ParentSetting = ({ user }) => {
                     <button
                       type="button"
                       className="ml-2 px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
-                      onClick={() => { setIsEditing(false); setFormError(""); setProfileForm(initialProfileForm); }}
+                      onClick={() => { 
+                        setIsEditing(false); 
+                        setFormError(""); 
+                        setProfileForm(initialProfileForm);
+                        setAvatarRemoved(false);
+                      }}
                       disabled={isUpdating}
                     >
                       Hủy

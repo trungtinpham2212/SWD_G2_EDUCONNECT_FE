@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { FaPaperPlane, FaRobot, FaUser, FaSpinner, FaMicrophone, FaVolumeUp } from 'react-icons/fa';
+import API_URL from '../../config/api';
 
 const Chatbot = ({ user }) => {
   const [messages, setMessages] = useState([
@@ -12,8 +13,27 @@ const Chatbot = ({ user }) => {
   ]);
   const [inputMessage, setInputMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState(null);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
+
+  // Fetch avatar similar to Sidebar
+  useEffect(() => {
+    const fetchAvatar = async () => {
+      if (user?.userId) {
+        try {
+          const res = await fetch(`${API_URL}/api/user-accounts/${user.userId}`);
+          if (res.ok) {
+            const data = await res.json();
+            setAvatarUrl(data.avatarurl || null);
+          }
+        } catch (e) {
+          setAvatarUrl(null);
+        }
+      }
+    };
+    fetchAvatar();
+  }, [user?.userId]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -161,7 +181,17 @@ const Chatbot = ({ user }) => {
                   : 'bg-gray-600 mr-2'
               }`}>
                 {message.sender === 'user' ? (
-                  <FaUser className="text-white text-sm" />
+                  avatarUrl ? (
+                    <img
+                      src={avatarUrl}
+                      alt="avatar"
+                      className="w-8 h-8 rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white font-medium text-sm">
+                      {user?.userName?.charAt(0)?.toUpperCase() || 'U'}
+                    </div>
+                  )
                 ) : (
                   <FaRobot className="text-white text-sm" />
                 )}

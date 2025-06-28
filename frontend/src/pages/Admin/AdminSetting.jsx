@@ -67,6 +67,7 @@ const AdminSetting = ({
 
   const [isEditing, setIsEditing] = useState(false);
   const [initialProfileForm, setInitialProfileForm] = useState(null);
+  const [avatarRemoved, setAvatarRemoved] = useState(false);
 
   // Fetch user info từ API
   useEffect(() => {
@@ -88,6 +89,7 @@ const AdminSetting = ({
           avatarurl: data.avatarurl || "",
         });
         setAvatarUrl(data.avatarurl || "");
+        setAvatarRemoved(false); // Reset avatar removed state
       } catch (err) {
         toast.error("Không lấy được thông tin cá nhân");
       } finally {
@@ -211,8 +213,11 @@ const AdminSetting = ({
       // Avatar: if avatarFile exists, send file, else send avatarurl (for legacy, but backend will handle file)
       if (avatarFile) {
         formData.append("avatarFile", avatarFile);
-      } else if (avatarUrl) {
+      } else if (avatarUrl && avatarUrl !== '') {
         formData.append("avatarurl", avatarUrl);
+      } else {
+        // Nếu không có avatarFile và avatarUrl rỗng, gửi flag để xóa avatar
+        formData.append("removeAvatar", "true");
       }
       // Password: if changing password, send new password, else send empty string or current password
       if (isPasswordChange) {
@@ -242,6 +247,13 @@ const AdminSetting = ({
           confirmPassword: "",
         }));
         setShowChangePasswordModal(false);
+        setIsEditing(false); // Tự động đóng chế độ chỉnh sửa
+        setAvatarFile(null); // Reset avatar file
+        setAvatarRemoved(false); // Reset avatar removed state
+        // Nếu đã xóa avatar, cập nhật state
+        if (!avatarFile && avatarUrl === '') {
+          setAvatarUrl('');
+        }
       } else {
         toast.error("Lỗi khi cập nhật: " + normalized);
       }
@@ -260,7 +272,8 @@ const AdminSetting = ({
     profileForm.email !== initialProfileForm.email ||
     profileForm.phonenumber !== initialProfileForm.phonenumber ||
     profileForm.address !== initialProfileForm.address ||
-    avatarFile // nếu có file avatar mới
+    avatarFile || // nếu có file avatar mới
+    avatarRemoved
   );
 
   const handleBanUser = (userAccount) => {
@@ -429,17 +442,33 @@ const AdminSetting = ({
                 <div className="flex flex-col items-center">
                   <div className="relative">
                     {avatarUrl ? (
-                      <img
-                        src={avatarUrl}
-                        alt="avatar"
-                        className={`w-32 h-32 rounded-full object-cover border-4 border-blue-200 shadow mb-2 transition-all ${
-                          uploading
-                            ? "opacity-60 cursor-not-allowed"
-                            : "cursor-pointer"
-                        }`}
-                        onClick={isEditing && !uploading ? handleAvatarClick : undefined}
-                        style={{ pointerEvents: isEditing && !uploading ? "auto" : "none" }}
-                      />
+                      <div className="relative">
+                        <img
+                          src={avatarUrl}
+                          alt="avatar"
+                          className={`w-32 h-32 rounded-full object-cover border-4 border-blue-200 shadow mb-2 transition-all ${
+                            uploading
+                              ? "opacity-60 cursor-not-allowed"
+                              : "cursor-pointer"
+                          }`}
+                          onClick={isEditing && !uploading ? handleAvatarClick : undefined}
+                          style={{ pointerEvents: isEditing && !uploading ? "auto" : "none" }}
+                        />
+                        {isEditing && !uploading && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAvatarUrl('');
+                              setAvatarFile(null);
+                              setAvatarRemoved(true);
+                            }}
+                            className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors duration-200"
+                            title="Xóa ảnh đại diện"
+                          >
+                            ×
+                          </button>
+                        )}
+                      </div>
                     ) : (
                       <div
                         className={`w-32 h-32 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 border-2 border-dashed border-blue-300 mb-2 ${
@@ -605,7 +634,12 @@ const AdminSetting = ({
                       <button
                         type="button"
                         className="ml-2 px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
-                        onClick={() => { setIsEditing(false); setFormError(""); setProfileForm(initialProfileForm); }}
+                        onClick={() => { 
+                          setIsEditing(false); 
+                          setFormError(""); 
+                          setProfileForm(initialProfileForm);
+                          setAvatarRemoved(false);
+                        }}
                         disabled={isUpdating}
                       >
                         Hủy
