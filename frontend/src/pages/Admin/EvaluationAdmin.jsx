@@ -368,6 +368,13 @@ const EvaluationAdmin = () => {
     return activity?.isnegative ? 'negative' : 'positive';
   };
 
+  // Thêm hàm handlePageChange
+  const handlePageChange = (page) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
+    }
+  };
+
   return (
     <div className="flex-1 p-6">
       <h2 className="text-2xl font-semibold mb-6">Quản lý đánh giá</h2>
