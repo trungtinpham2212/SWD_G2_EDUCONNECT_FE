@@ -5,7 +5,7 @@ const Chatbot = ({ user }) => {
   const [messages, setMessages] = useState([
     {
       id: 1,
-      text: "Xin chào! Tôi là trợ lý AI của EduConnect. Tôi có thể giúp bạn với các câu hỏi về giáo dục, thông tin học tập của con bạn, hoặc bất kỳ vấn đề nào khác. Bạn có thể hỏi tôi bất cứ điều gì!",
+      text: "Xin chào! Tôi là trợ lý AI của EduConnect. Tôi có thể giúp bạn với các câu hỏi về thông tin học tập của con bạn, hoặc bất kỳ vấn đề nào khác. Bạn có thể hỏi tôi bất cứ điều gì!",
       sender: 'ai',
       timestamp: new Date()
     }
