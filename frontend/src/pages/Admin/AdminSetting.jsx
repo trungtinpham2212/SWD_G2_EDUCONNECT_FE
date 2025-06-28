@@ -1,25 +1,44 @@
-import React, { useState, useEffect, useRef } from 'react';
-import API_URL from '../../config/api';
-import { toast, ToastContainer } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
-import { FaUser, FaBan, FaSearch, FaFilter, FaEdit, FaSave, FaTimes, FaUnlock, FaSort, FaCloudUploadAlt, FaEye, FaEyeSlash } from 'react-icons/fa';
+import React, { useState, useEffect, useRef } from "react";
+import API_URL from "../../config/api";
+import { toast, ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
+import {
+  FaUser,
+  FaBan,
+  FaSearch,
+  FaFilter,
+  FaEdit,
+  FaSave,
+  FaTimes,
+  FaUnlock,
+  FaSort,
+  FaCloudUploadAlt,
+  FaEye,
+  FaEyeSlash,
+} from "react-icons/fa";
 
-const AdminSetting = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) => {
-  const [activeTab, setActiveTab] = useState('profile');
+const AdminSetting = ({
+  user,
+  active,
+  setActive,
+  isSidebarOpen,
+  setSidebarOpen,
+}) => {
+  const [activeTab, setActiveTab] = useState("profile");
   const [userAccounts, setUserAccounts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedRole, setSelectedRole] = useState('');
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedRole, setSelectedRole] = useState("");
   const [showBanModal, setShowBanModal] = useState(false);
   const [userToBan, setUserToBan] = useState(null);
   const [isBanning, setIsBanning] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
-  const [sortBy, setSortBy] = useState('status');
-  const [sortOrder, setSortOrder] = useState('desc');
-  const [selectedStatus, setSelectedStatus] = useState('');
+  const [sortBy, setSortBy] = useState("status");
+  const [sortOrder, setSortOrder] = useState("desc");
+  const [selectedStatus, setSelectedStatus] = useState("");
 
   // Avatar upload
-  const [avatarUrl, setAvatarUrl] = useState('');
+  const [avatarUrl, setAvatarUrl] = useState("");
   const [avatarFile, setAvatarFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [loadingProfile, setLoadingProfile] = useState(true);
@@ -29,22 +48,25 @@ const AdminSetting = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [formError, setFormError] = useState('');
+  const [formError, setFormError] = useState("");
   const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
   const [profileForm, setProfileForm] = useState({
-    currentPassword: '',
-    password: '',
-    confirmPassword: '',
-    fullname: '',
-    email: '',
-    phonenumber: '',
-    address: '',
-    roleid: '',
-    username: '',
-    avatarurl: ''
+    currentPassword: "",
+    password: "",
+    confirmPassword: "",
+    fullname: "",
+    email: "",
+    phonenumber: "",
+    address: "",
+    roleid: "",
+    username: "",
+    avatarurl: "",
   });
 
   const [changePasswordLoading, setChangePasswordLoading] = useState(false);
+
+  const [isEditing, setIsEditing] = useState(false);
+  const [initialProfileForm, setInitialProfileForm] = useState(null);
 
   // Fetch user info từ API
   useEffect(() => {
@@ -54,20 +76,20 @@ const AdminSetting = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }
         const res = await fetch(`${API_URL}/api/user-accounts/${user.userId}`);
         const data = await res.json();
         setProfileForm({
-          currentPassword: '',
-          password: '',
-          confirmPassword: '',
-          fullname: data.fullname || '',
-          email: data.email || '',
-          phonenumber: data.phonenumber || '',
-          address: data.address || '',
+          currentPassword: "",
+          password: "",
+          confirmPassword: "",
+          fullname: data.fullname || "",
+          email: data.email || "",
+          phonenumber: data.phonenumber || "",
+          address: data.address || "",
           roleid: data.roleid,
           username: data.username,
-          avatarurl: data.avatarurl || ''
+          avatarurl: data.avatarurl || "",
         });
-        setAvatarUrl(data.avatarurl || '');
+        setAvatarUrl(data.avatarurl || "");
       } catch (err) {
-        toast.error('Không lấy được thông tin cá nhân');
+        toast.error("Không lấy được thông tin cá nhân");
       } finally {
         setLoadingProfile(false);
       }
@@ -75,11 +97,18 @@ const AdminSetting = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }
     if (user?.userId) fetchProfile();
   }, [user]);
 
+  // Khi load profile thành công, lưu initialProfileForm
+  useEffect(() => {
+    if (!loadingProfile) {
+      setInitialProfileForm(profileForm);
+    }
+  }, [loadingProfile]);
+
   // Role mapping
   const roleMap = {
-    1: 'Quản trị viên',
-    2: 'Giáo viên',
-    3: 'Phụ huynh'
+    1: "Quản trị viên",
+    2: "Giáo viên",
+    3: "Phụ huynh",
   };
 
   useEffect(() => {
@@ -93,8 +122,8 @@ const AdminSetting = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }
       const data = await response.json();
       setUserAccounts(data);
     } catch (error) {
-      console.error('Error fetching user accounts:', error);
-      toast.error('Có lỗi xảy ra khi tải danh sách tài khoản');
+      console.error("Error fetching user accounts:", error);
+      toast.error("Có lỗi xảy ra khi tải danh sách tài khoản");
     } finally {
       setLoading(false);
     }
@@ -103,7 +132,7 @@ const AdminSetting = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }
   const handleProfileChange = (e) => {
     setProfileForm({
       ...profileForm,
-      [e.target.name]: e.target.value
+      [e.target.name]: e.target.value,
     });
   };
 
@@ -129,32 +158,40 @@ const AdminSetting = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }
 
   const handleUpdateProfile = async (e) => {
     e.preventDefault();
-    setFormError('');
+    setFormError("");
     let isPasswordChange = false;
     // Nếu đang đổi mật khẩu thì kiểm tra
-    if (showChangePasswordModal && (profileForm.password || profileForm.confirmPassword || profileForm.currentPassword)) {
+    if (
+      showChangePasswordModal &&
+      (profileForm.password ||
+        profileForm.confirmPassword ||
+        profileForm.currentPassword)
+    ) {
       isPasswordChange = true;
       if (!profileForm.currentPassword) {
-        setFormError('Vui lòng nhập mật khẩu hiện tại.');
+        setFormError("Vui lòng nhập mật khẩu hiện tại.");
         return;
       }
       if (!profileForm.password) {
-        setFormError('Vui lòng nhập mật khẩu mới.');
+        setFormError("Vui lòng nhập mật khẩu mới.");
         return;
       }
       if (profileForm.password !== profileForm.confirmPassword) {
-        setFormError('Mật khẩu mới và xác nhận không trùng khớp.');
+        setFormError("Mật khẩu mới và xác nhận không trùng khớp.");
         return;
       }
       setChangePasswordLoading(true);
       // Dùng auth/login để xác thực mật khẩu hiện tại
       const verifyRes = await fetch(`${API_URL}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: profileForm.username, password: profileForm.currentPassword })
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: profileForm.username,
+          password: profileForm.currentPassword,
+        }),
       });
       if (!verifyRes.ok) {
-        setFormError('Mật khẩu hiện tại không đúng.');
+        setFormError("Mật khẩu hiện tại không đúng.");
         setChangePasswordLoading(false);
         return;
       }
@@ -164,54 +201,75 @@ const AdminSetting = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }
     try {
       // Always send all fields, use FormData for multipart/form-data
       const formData = new FormData();
-      formData.append('userId', user.userId.toString());
-      formData.append('fullname', profileForm.fullname);
-      formData.append('email', profileForm.email);
-      formData.append('phonenumber', profileForm.phonenumber);
-      formData.append('address', profileForm.address);
-      formData.append('roleid', profileForm.roleid);
-      formData.append('username', profileForm.username);
+      formData.append("userId", user.userId.toString());
+      formData.append("fullname", profileForm.fullname);
+      formData.append("email", profileForm.email);
+      formData.append("phonenumber", profileForm.phonenumber);
+      formData.append("address", profileForm.address);
+      formData.append("roleid", profileForm.roleid);
+      formData.append("username", profileForm.username);
       // Avatar: if avatarFile exists, send file, else send avatarurl (for legacy, but backend will handle file)
       if (avatarFile) {
-        formData.append('avatarFile', avatarFile);
+        formData.append("avatarFile", avatarFile);
       } else if (avatarUrl) {
-        formData.append('avatarurl', avatarUrl);
+        formData.append("avatarurl", avatarUrl);
       }
       // Password: if changing password, send new password, else send empty string or current password
       if (isPasswordChange) {
-        formData.append('password', profileForm.password);
+        formData.append("password", profileForm.password);
       } else {
-        formData.append('password', '');
+        formData.append("password", "");
       }
-      const response = await fetch(`${API_URL}/api/user-accounts/${user.userId}`, {
-        method: 'PUT',
-        body: formData
-      });
+      const response = await fetch(
+        `${API_URL}/api/user-accounts/${user.userId}`,
+        {
+          method: "PUT",
+          body: formData,
+        }
+      );
       let text = await response.text();
-      const normalized = text.replace(/"/g, '').trim();
-      if (response.ok || normalized.toLowerCase().includes('success') || normalized.includes('Update successful')) {
-        toast.success('Cập nhật thông tin cá nhân thành công!');
-        setProfileForm(prev => ({ ...prev, currentPassword: '', password: '', confirmPassword: '' }));
+      const normalized = text.replace(/"/g, "").trim();
+      if (
+        response.ok ||
+        normalized.toLowerCase().includes("success") ||
+        normalized.includes("Update successful")
+      ) {
+        toast.success("Cập nhật thông tin cá nhân thành công!");
+        setProfileForm((prev) => ({
+          ...prev,
+          currentPassword: "",
+          password: "",
+          confirmPassword: "",
+        }));
         setShowChangePasswordModal(false);
       } else {
-        toast.error('Lỗi khi cập nhật: ' + normalized);
+        toast.error("Lỗi khi cập nhật: " + normalized);
       }
     } catch (error) {
-      console.error('Error updating profile:', error);
-      toast.error('Có lỗi xảy ra khi cập nhật thông tin cá nhân');
+      console.error("Error updating profile:", error);
+      toast.error("Có lỗi xảy ra khi cập nhật thông tin cá nhân");
     } finally {
       setIsUpdating(false);
       setChangePasswordLoading(false);
     }
   };
 
+  // Hàm so sánh dữ liệu
+  const isDirty = isEditing && initialProfileForm && (
+    profileForm.fullname !== initialProfileForm.fullname ||
+    profileForm.email !== initialProfileForm.email ||
+    profileForm.phonenumber !== initialProfileForm.phonenumber ||
+    profileForm.address !== initialProfileForm.address ||
+    avatarFile // nếu có file avatar mới
+  );
+
   const handleBanUser = (userAccount) => {
-    setUserToBan({ ...userAccount, action: 'ban' });
+    setUserToBan({ ...userAccount, action: "ban" });
     setShowBanModal(true);
   };
 
   const handleUnbanUser = (userAccount) => {
-    setUserToBan({ ...userAccount, action: 'unban' });
+    setUserToBan({ ...userAccount, action: "unban" });
     setShowBanModal(true);
   };
 
@@ -221,34 +279,43 @@ const AdminSetting = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }
     try {
       // Use the same ban endpoint for both ban and unban
       const banData = {
-        status: userToBan.action === 'ban' ? false : true // false for ban, true for unban
+        status: userToBan.action === "ban" ? false : true, // false for ban, true for unban
       };
-      const response = await fetch(`${API_URL}/api/user-accounts/${userToBan.userId}/ban`, {
-        method: 'PUT',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        body: JSON.stringify(banData)
-      });
+      const response = await fetch(
+        `${API_URL}/api/user-accounts/${userToBan.userId}/ban`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify(banData),
+        }
+      );
       let result;
-      const contentType = response.headers.get('content-type');
-      if (contentType && contentType.includes('application/json')) {
+      const contentType = response.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
         result = await response.json();
       } else {
         const text = await response.text();
         result = { message: text };
       }
-      if (response.ok || result.message?.toLowerCase().includes('success') || result.message?.includes('Update successful')) {
-        const action = userToBan.action === 'ban' ? 'khóa' : 'mở khóa';
+      if (
+        response.ok ||
+        result.message?.toLowerCase().includes("success") ||
+        result.message?.includes("Update successful")
+      ) {
+        const action = userToBan.action === "ban" ? "khóa" : "mở khóa";
         toast.success(`Đã ${action} tài khoản của ${userToBan.fullname}`);
         await fetchUserAccounts();
       } else {
-        toast.error('Lỗi khi thực hiện thao tác: ' + (result.message || 'Unknown error'));
+        toast.error(
+          "Lỗi khi thực hiện thao tác: " + (result.message || "Unknown error")
+        );
       }
     } catch (error) {
-      console.error('Error banning/unbanning user:', error);
-      toast.error('Có lỗi xảy ra khi thực hiện thao tác');
+      console.error("Error banning/unbanning user:", error);
+      toast.error("Có lỗi xảy ra khi thực hiện thao tác");
     } finally {
       setIsBanning(false);
       setShowBanModal(false);
@@ -258,22 +325,25 @@ const AdminSetting = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }
 
   const handleSort = (field) => {
     if (sortBy === field) {
-      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+      setSortOrder(sortOrder === "asc" ? "desc" : "asc");
     } else {
       setSortBy(field);
-      setSortOrder('asc');
+      setSortOrder("asc");
     }
   };
 
   // Filter users based on search term and role
-  const filteredUsers = userAccounts.filter(user => {
-    const matchesSearch = user.fullname.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         user.username.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesRole = selectedRole === '' || user.roleid === parseInt(selectedRole);
-    const matchesStatus = selectedStatus === '' || 
-                         (selectedStatus === 'active' && user.status) || 
-                         (selectedStatus === 'banned' && !user.status);
+  const filteredUsers = userAccounts.filter((user) => {
+    const matchesSearch =
+      user.fullname.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      user.username.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesRole =
+      selectedRole === "" || user.roleid === parseInt(selectedRole);
+    const matchesStatus =
+      selectedStatus === "" ||
+      (selectedStatus === "active" && user.status) ||
+      (selectedStatus === "banned" && !user.status);
     return matchesSearch && matchesRole && matchesStatus;
   });
 
@@ -281,22 +351,22 @@ const AdminSetting = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }
   const sortedUsers = [...filteredUsers].sort((a, b) => {
     let aValue, bValue;
     switch (sortBy) {
-      case 'status':
+      case "status":
         aValue = a.status ? 1 : 0;
         bValue = b.status ? 1 : 0;
         break;
-      case 'name':
+      case "name":
         aValue = a.fullname.toLowerCase();
         bValue = b.fullname.toLowerCase();
         break;
-      case 'role':
+      case "role":
         aValue = a.roleid;
         bValue = b.roleid;
         break;
       default:
         return 0;
     }
-    if (sortOrder === 'asc') {
+    if (sortOrder === "asc") {
       return aValue > bValue ? 1 : -1;
     } else {
       return aValue < bValue ? 1 : -1;
@@ -311,22 +381,22 @@ const AdminSetting = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }
         <div className="border-b border-gray-200">
           <nav className="-mb-px flex space-x-8">
             <button
-              onClick={() => setActiveTab('profile')}
+              onClick={() => setActiveTab("profile")}
               className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'profile'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                activeTab === "profile"
+                  ? "border-blue-500 text-blue-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
               }`}
             >
               <FaUser className="inline mr-2" />
               Thông tin cá nhân
             </button>
             <button
-              onClick={() => setActiveTab('ban')}
+              onClick={() => setActiveTab("ban")}
               className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'ban'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                activeTab === "ban"
+                  ? "border-blue-500 text-blue-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
               }`}
             >
               <FaBan className="inline mr-2" />
@@ -336,9 +406,20 @@ const AdminSetting = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }
         </div>
       </div>
       {/* Profile Tab */}
-      {activeTab === 'profile' && (
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <h3 className="text-lg font-medium mb-4">Chỉnh sửa thông tin cá nhân</h3>
+      {activeTab === "profile" && (
+        <div className="bg-white rounded-lg shadow-md p-6 relative">
+          <h3 className="text-lg font-medium mb-4 flex items-center justify-between">
+            <span>Chỉnh sửa thông tin cá nhân</span>
+            {!isEditing && (
+              <button
+                className="text-blue-600 hover:text-blue-800 p-2 rounded-full"
+                onClick={() => setIsEditing(true)}
+                title="Chỉnh sửa thông tin"
+              >
+                <FaEdit className="text-xl" />
+              </button>
+            )}
+          </h3>
           {loadingProfile ? (
             <div>Đang tải thông tin...</div>
           ) : (
@@ -351,24 +432,52 @@ const AdminSetting = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }
                       <img
                         src={avatarUrl}
                         alt="avatar"
-                        className={`w-32 h-32 rounded-full object-cover border-4 border-blue-200 shadow mb-2 transition-all ${uploading ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
-                        onClick={handleAvatarClick}
-                        style={{ pointerEvents: uploading ? 'none' : 'auto' }}
+                        className={`w-32 h-32 rounded-full object-cover border-4 border-blue-200 shadow mb-2 transition-all ${
+                          uploading
+                            ? "opacity-60 cursor-not-allowed"
+                            : "cursor-pointer"
+                        }`}
+                        onClick={isEditing && !uploading ? handleAvatarClick : undefined}
+                        style={{ pointerEvents: isEditing && !uploading ? "auto" : "none" }}
                       />
                     ) : (
                       <div
-                        className={`w-32 h-32 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 border-2 border-dashed border-blue-300 mb-2 ${uploading ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer hover:bg-blue-50'}`}
-                        onClick={handleAvatarClick}
-                        style={{ pointerEvents: uploading ? 'none' : 'auto' }}
+                        className={`w-32 h-32 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 border-2 border-dashed border-blue-300 mb-2 ${
+                          uploading
+                            ? "opacity-60 cursor-not-allowed"
+                            : isEditing
+                            ? "cursor-pointer hover:bg-blue-50"
+                            : ""
+                        }`}
+                        onClick={isEditing && !uploading ? handleAvatarClick : undefined}
+                        style={{ pointerEvents: isEditing && !uploading ? "auto" : "none" }}
                       >
-                        <span className="text-center px-2">Bấm vào để tải ảnh đại diện</span>
+                        <span className="text-center px-2">
+                          Bấm vào để tải ảnh đại diện
+                        </span>
                       </div>
                     )}
                     {uploading && (
                       <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-60 rounded-full">
-                        <svg className="animate-spin h-8 w-8 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
+                        <svg
+                          className="animate-spin h-8 w-8 text-blue-500"
+                          xmlns="http://www.w3.org/2000/svg"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                        >
+                          <circle
+                            className="opacity-25"
+                            cx="12"
+                            cy="12"
+                            r="10"
+                            stroke="currentColor"
+                            strokeWidth="4"
+                          ></circle>
+                          <path
+                            className="opacity-75"
+                            fill="currentColor"
+                            d="M4 12a8 8 0 018-8v8z"
+                          ></path>
                         </svg>
                       </div>
                     )}
@@ -380,92 +489,129 @@ const AdminSetting = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }
                       onChange={handleAvatarChange}
                       className="hidden"
                       tabIndex={-1}
-                      disabled={uploading}
+                      disabled={uploading || !isEditing}
                     />
                   </div>
                 </div>
                 {/* Thông tin bên phải */}
                 <div className="flex-1">
                   <div className="mb-4">
-                    <div className="text-2xl font-bold text-gray-800 mb-1">{profileForm.fullname}</div>
-                    <div className="text-gray-500 text-sm mb-2">{profileForm.username}</div>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="text-2xl font-bold text-gray-800 mb-1">
+                      {profileForm.fullname}
+                    </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Vai trò</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Tên đăng nhập
+                      </label>
                       <input
                         type="text"
-                        name="roleid"
-                        value={roleMap[profileForm.roleid] || profileForm.roleid}
+                        name="username"
+                        value={profileForm.username}
                         disabled
                         className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 text-gray-500"
                       />
                     </div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <button
-                        type="button"
-                        className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 mt-6"
-                        onClick={() => setShowChangePasswordModal(true)}
-                      >
-                        Đổi mật khẩu
-                      </button>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Vai trò
+                      </label>
+                      <input
+                        type="text"
+                        name="roleid"
+                        value={
+                          roleMap[profileForm.roleid] || profileForm.roleid
+                        }
+                        disabled
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 text-gray-500"
+                      />
                     </div>
+                    {isEditing && (
+                      <div>
+                        <button
+                          type="button"
+                          className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 mt-6"
+                          onClick={() => setShowChangePasswordModal(true)}
+                        >
+                          Đổi mật khẩu
+                        </button>
+                      </div>
+                    )}
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Email
+                      </label>
                       <input
                         type="email"
                         name="email"
                         value={profileForm.email}
                         onChange={handleProfileChange}
                         required
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        disabled={!isEditing}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white disabled:bg-gray-100"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Số điện thoại</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Số điện thoại
+                      </label>
                       <input
                         type="text"
                         name="phonenumber"
                         value={profileForm.phonenumber}
                         onChange={handleProfileChange}
                         required
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        disabled={!isEditing}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white disabled:bg-gray-100"
                       />
                     </div>
                     <div className="md:col-span-2">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Địa chỉ</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Địa chỉ
+                      </label>
                       <textarea
                         name="address"
                         value={profileForm.address}
                         onChange={handleProfileChange}
                         rows="2"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        disabled={!isEditing}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white disabled:bg-gray-100"
                       />
                     </div>
                   </div>
-                  {formError && <div className="text-red-600 text-sm mt-2">{formError}</div>}
-                  <div className="mt-6 flex justify-end">
-                    <button
-                      type="submit"
-                      disabled={isUpdating || changePasswordLoading}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 flex items-center justify-center"
-                    >
-                      {(isUpdating || changePasswordLoading) ? (
-                        <>
-                          <svg className="animate-spin h-5 w-5 mr-2 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
-                          </svg>
-                          Đang lưu...
-                        </>
-                      ) : (
-                        <>
-                          <FaSave className="inline mr-2" />
-                          Lưu thay đổi
-                        </>
-                      )}
-                    </button>
-                  </div>
+                  {formError && (
+                    <div className="text-red-600 text-sm mt-2">{formError}</div>
+                  )}
+                  {isEditing && (
+                    <div className="mt-6 flex justify-end">
+                      <button
+                        type="submit"
+                        disabled={!isDirty || isUpdating}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                      >
+                        {isUpdating ? (
+                          <>
+                            <FaSave className="inline mr-2" />
+                            Đang lưu...
+                          </>
+                        ) : (
+                          <>
+                            <FaSave className="inline mr-2" />
+                            Lưu thay đổi
+                          </>
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        className="ml-2 px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+                        onClick={() => { setIsEditing(false); setFormError(""); setProfileForm(initialProfileForm); }}
+                        disabled={isUpdating}
+                      >
+                        Hủy
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             </form>
@@ -473,9 +619,11 @@ const AdminSetting = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }
         </div>
       )}
       {/* Ban Account Tab */}
-      {activeTab === 'ban' && (
+      {activeTab === "ban" && (
         <div className="bg-white rounded-lg shadow-md p-6">
-          <h3 className="text-lg font-medium mb-4">Quản lý tài khoản người dùng</h3>
+          <h3 className="text-lg font-medium mb-4">
+            Quản lý tài khoản người dùng
+          </h3>
           {/* Search and Filter */}
           <div className="mb-6 flex flex-col md:flex-row gap-4">
             <div className="flex-1">
@@ -530,9 +678,9 @@ const AdminSetting = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Tên đăng nhập
                     </th>
-                    <th 
+                    <th
                       className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                      onClick={() => handleSort('name')}
+                      onClick={() => handleSort("name")}
                     >
                       <div className="flex items-center">
                         Họ và tên
@@ -542,18 +690,18 @@ const AdminSetting = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Email
                     </th>
-                    <th 
+                    <th
                       className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                      onClick={() => handleSort('role')}
+                      onClick={() => handleSort("role")}
                     >
                       <div className="flex items-center">
                         Vai trò
                         <FaSort className="ml-1 text-gray-400" />
                       </div>
                     </th>
-                    <th 
+                    <th
                       className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                      onClick={() => handleSort('status')}
+                      onClick={() => handleSort("status")}
                     >
                       <div className="flex items-center">
                         Trạng thái
@@ -568,8 +716,13 @@ const AdminSetting = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }
                 <tbody className="bg-white divide-y divide-gray-200">
                   {sortedUsers.length === 0 ? (
                     <tr>
-                      <td colSpan="7" className="px-6 py-4 text-center text-gray-500">
-                        {searchTerm || selectedRole ? 'Không tìm thấy tài khoản nào phù hợp' : 'Không có tài khoản nào'}
+                      <td
+                        colSpan="7"
+                        className="px-6 py-4 text-center text-gray-500"
+                      >
+                        {searchTerm || selectedRole
+                          ? "Không tìm thấy tài khoản nào phù hợp"
+                          : "Không có tài khoản nào"}
                       </td>
                     </tr>
                   ) : (
@@ -588,24 +741,32 @@ const AdminSetting = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }
                           {userAccount.email}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                            userAccount.roleid === 1 ? 'bg-red-100 text-red-800' :
-                            userAccount.roleid === 2 ? 'bg-blue-100 text-blue-800' :
-                            'bg-green-100 text-green-800'
-                          }`}>
-                            {roleMap[userAccount.roleid] || 'Unknown'}
+                          <span
+                            className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                              userAccount.roleid === 1
+                                ? "bg-red-100 text-red-800"
+                                : userAccount.roleid === 2
+                                ? "bg-blue-100 text-blue-800"
+                                : "bg-green-100 text-green-800"
+                            }`}
+                          >
+                            {roleMap[userAccount.roleid] || "Unknown"}
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                            userAccount.status ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                          }`}>
-                            {userAccount.status ? 'Hoạt động' : 'Đã khóa'}
+                          <span
+                            className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                              userAccount.status
+                                ? "bg-green-100 text-green-800"
+                                : "bg-red-100 text-red-800"
+                            }`}
+                          >
+                            {userAccount.status ? "Hoạt động" : "Đã khóa"}
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                          {userAccount.userId !== user?.userId && (
-                            userAccount.status ? (
+                          {userAccount.userId !== user?.userId &&
+                            (userAccount.status ? (
                               <button
                                 onClick={() => handleBanUser(userAccount)}
                                 className="text-red-600 hover:text-red-900 bg-red-50 hover:bg-red-100 px-3 py-1 rounded-md transition-colors"
@@ -621,10 +782,11 @@ const AdminSetting = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }
                                 <FaUnlock className="inline mr-1" />
                                 Mở khóa
                               </button>
-                            )
-                          )}
+                            ))}
                           {userAccount.userId === user?.userId && (
-                            <span className="text-gray-400">Tài khoản hiện tại</span>
+                            <span className="text-gray-400">
+                              Tài khoản hiện tại
+                            </span>
                           )}
                         </td>
                       </tr>
@@ -641,27 +803,32 @@ const AdminSetting = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
           <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
             <div className="mt-3 text-center">
-              <div className={`mx-auto flex items-center justify-center h-12 w-12 rounded-full ${
-                userToBan?.action === 'ban' ? 'bg-red-100' : 'bg-green-100'
-              }`}>
-                {userToBan?.action === 'ban' ? (
+              <div
+                className={`mx-auto flex items-center justify-center h-12 w-12 rounded-full ${
+                  userToBan?.action === "ban" ? "bg-red-100" : "bg-green-100"
+                }`}
+              >
+                {userToBan?.action === "ban" ? (
                   <FaBan className="h-6 w-6 text-red-600" />
                 ) : (
                   <FaUnlock className="h-6 w-6 text-green-600" />
                 )}
               </div>
               <h3 className="text-lg font-medium text-gray-900 mt-4">
-                {userToBan?.action === 'ban' ? 'Xác nhận khóa tài khoản' : 'Xác nhận mở khóa tài khoản'}
+                {userToBan?.action === "ban"
+                  ? "Xác nhận khóa tài khoản"
+                  : "Xác nhận mở khóa tài khoản"}
               </h3>
               <div className="mt-2 px-7 py-3">
                 <p className="text-sm text-gray-500">
-                  Bạn có chắc chắn muốn {userToBan?.action === 'ban' ? 'khóa' : 'mở khóa'} tài khoản của <strong>{userToBan?.fullname}</strong>?
+                  Bạn có chắc chắn muốn{" "}
+                  {userToBan?.action === "ban" ? "khóa" : "mở khóa"} tài khoản
+                  của <strong>{userToBan?.fullname}</strong>?
                 </p>
                 <p className="text-xs text-gray-400 mt-2">
-                  {userToBan?.action === 'ban' 
-                    ? 'Tài khoản này sẽ không thể đăng nhập cho đến khi được mở khóa.'
-                    : 'Tài khoản này sẽ có thể đăng nhập lại bình thường.'
-                  }
+                  {userToBan?.action === "ban"
+                    ? "Tài khoản này sẽ không thể đăng nhập cho đến khi được mở khóa."
+                    : "Tài khoản này sẽ có thể đăng nhập lại bình thường."}
                 </p>
               </div>
               <div className="flex justify-center space-x-4 mt-4">
@@ -676,9 +843,9 @@ const AdminSetting = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }
                   onClick={confirmBanUser}
                   disabled={isBanning}
                   className={`px-4 py-2 text-white rounded-md focus:outline-none focus:ring-2 disabled:opacity-50 ${
-                    userToBan?.action === 'ban' 
-                      ? 'bg-red-600 hover:bg-red-700 focus:ring-red-500' 
-                      : 'bg-green-600 hover:bg-green-700 focus:ring-green-500'
+                    userToBan?.action === "ban"
+                      ? "bg-red-600 hover:bg-red-700 focus:ring-red-500"
+                      : "bg-green-600 hover:bg-green-700 focus:ring-green-500"
                   }`}
                 >
                   {isBanning ? (
@@ -688,7 +855,7 @@ const AdminSetting = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }
                     </>
                   ) : (
                     <>
-                      {userToBan?.action === 'ban' ? (
+                      {userToBan?.action === "ban" ? (
                         <>
                           <FaBan className="inline mr-1" />
                           Khóa tài khoản
@@ -715,28 +882,29 @@ const AdminSetting = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }
               className="absolute top-2 right-2 text-gray-400 hover:text-gray-600 text-xl"
               onClick={() => {
                 setShowChangePasswordModal(false);
-                setFormError('');
-                setProfileForm(prev => ({
+                setFormError("");
+                setProfileForm((prev) => ({
                   ...prev,
-                  currentPassword: '',
-                  password: '',
-                  confirmPassword: ''
+                  currentPassword: "",
+                  password: "",
+                  confirmPassword: "",
                 }));
               }}
               aria-label="Đóng"
             >
               &times;
             </button>
-            <h3 className="text-lg font-semibold mb-4 text-center">Đổi mật khẩu</h3>
-            <form
-              onSubmit={handleUpdateProfile}
-              className="space-y-4"
-            >
+            <h3 className="text-lg font-semibold mb-4 text-center">
+              Đổi mật khẩu
+            </h3>
+            <form onSubmit={handleUpdateProfile} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Mật khẩu hiện tại</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Mật khẩu hiện tại
+                </label>
                 <div className="relative">
                   <input
-                    type={showCurrentPassword ? 'text' : 'password'}
+                    type={showCurrentPassword ? "text" : "password"}
                     name="currentPassword"
                     value={profileForm.currentPassword}
                     onChange={handleProfileChange}
@@ -753,10 +921,12 @@ const AdminSetting = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Mật khẩu mới</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Mật khẩu mới
+                </label>
                 <div className="relative">
                   <input
-                    type={showNewPassword ? 'text' : 'password'}
+                    type={showNewPassword ? "text" : "password"}
                     name="password"
                     value={profileForm.password}
                     onChange={handleProfileChange}
@@ -773,10 +943,12 @@ const AdminSetting = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Xác nhận mật khẩu mới</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Xác nhận mật khẩu mới
+                </label>
                 <div className="relative">
                   <input
-                    type={showConfirmPassword ? 'text' : 'password'}
+                    type={showConfirmPassword ? "text" : "password"}
                     name="confirmPassword"
                     value={profileForm.confirmPassword}
                     onChange={handleProfileChange}
@@ -792,19 +964,21 @@ const AdminSetting = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }
                   </span>
                 </div>
               </div>
-              {formError && <div className="text-red-600 text-sm mt-2">{formError}</div>}
+              {formError && (
+                <div className="text-red-600 text-sm mt-2">{formError}</div>
+              )}
               <div className="flex justify-end gap-2 mt-4">
                 <button
                   type="button"
                   className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
                   onClick={() => {
                     setShowChangePasswordModal(false);
-                    setFormError('');
-                    setProfileForm(prev => ({
+                    setFormError("");
+                    setProfileForm((prev) => ({
                       ...prev,
-                      currentPassword: '',
-                      password: '',
-                      confirmPassword: ''
+                      currentPassword: "",
+                      password: "",
+                      confirmPassword: "",
                     }));
                   }}
                 >
@@ -815,11 +989,27 @@ const AdminSetting = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }
                   disabled={isUpdating || changePasswordLoading}
                   className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 flex items-center justify-center"
                 >
-                  {(isUpdating || changePasswordLoading) ? (
+                  {isUpdating || changePasswordLoading ? (
                     <>
-                      <svg className="animate-spin h-5 w-5 mr-2 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
+                      <svg
+                        className="animate-spin h-5 w-5 mr-2 text-white"
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                      >
+                        <circle
+                          className="opacity-25"
+                          cx="12"
+                          cy="12"
+                          r="10"
+                          stroke="currentColor"
+                          strokeWidth="4"
+                        ></circle>
+                        <path
+                          className="opacity-75"
+                          fill="currentColor"
+                          d="M4 12a8 8 0 018-8v8z"
+                        ></path>
                       </svg>
                       Đang lưu...
                     </>

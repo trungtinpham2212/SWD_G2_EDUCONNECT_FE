@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import API_URL from '../../config/api';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import { FaSave, FaCloudUploadAlt, FaEye, FaEyeSlash } from 'react-icons/fa';
+import { FaSave, FaCloudUploadAlt, FaEye, FaEyeSlash, FaEdit } from 'react-icons/fa';
 
 const ParentSetting = ({ user }) => {
   const [avatarUrl, setAvatarUrl] = useState('');
@@ -28,6 +28,8 @@ const ParentSetting = ({ user }) => {
     username: '',
     avatarurl: ''
   });
+  const [isEditing, setIsEditing] = useState(false);
+  const [initialProfileForm, setInitialProfileForm] = useState(null);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -55,6 +57,12 @@ const ParentSetting = ({ user }) => {
     };
     if (user?.userId) fetchProfile();
   }, [user]);
+
+  useEffect(() => {
+    if (!loadingProfile) {
+      setInitialProfileForm(profileForm);
+    }
+  }, [loadingProfile]);
 
   const handleProfileChange = (e) => {
     setProfileForm({
@@ -182,11 +190,30 @@ const ParentSetting = ({ user }) => {
     }
   };
 
+  const isDirty = isEditing && initialProfileForm && (
+    profileForm.fullname !== initialProfileForm.fullname ||
+    profileForm.email !== initialProfileForm.email ||
+    profileForm.phonenumber !== initialProfileForm.phonenumber ||
+    profileForm.address !== initialProfileForm.address ||
+    avatarFile
+  );
+
   return (
     <div className="flex-1 p-6">
       <h2 className="text-2xl font-semibold mb-6">Cài đặt phụ huynh</h2>
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <h3 className="text-lg font-medium mb-4">Chỉnh sửa thông tin cá nhân</h3>
+      <div className="bg-white rounded-lg shadow-md p-6 relative">
+        <h3 className="text-lg font-medium mb-4 flex items-center justify-between">
+          <span>Chỉnh sửa thông tin cá nhân</span>
+          {!isEditing && (
+            <button
+              className="text-blue-600 hover:text-blue-800 p-2 rounded-full"
+              onClick={() => setIsEditing(true)}
+              title="Chỉnh sửa thông tin"
+            >
+              <FaEdit className="text-xl" />
+            </button>
+          )}
+        </h3>
         {loadingProfile ? (
           <div>Đang tải thông tin...</div>
         ) : (
@@ -200,14 +227,14 @@ const ParentSetting = ({ user }) => {
                       src={avatarUrl}
                       alt="avatar"
                       className={`w-32 h-32 rounded-full object-cover border-4 border-blue-200 shadow mb-2 transition-all ${uploading ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
-                      onClick={handleAvatarClick}
-                      style={{ pointerEvents: uploading ? 'none' : 'auto' }}
+                      onClick={isEditing && !uploading ? handleAvatarClick : undefined}
+                      style={{ pointerEvents: isEditing && !uploading ? 'auto' : 'none' }}
                     />
                   ) : (
                     <div
-                      className={`w-32 h-32 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 border-2 border-dashed border-blue-300 mb-2 ${uploading ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer hover:bg-blue-50'}`}
-                      onClick={handleAvatarClick}
-                      style={{ pointerEvents: uploading ? 'none' : 'auto' }}
+                      className={`w-32 h-32 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 border-2 border-dashed border-blue-300 mb-2 ${uploading ? 'opacity-60 cursor-not-allowed' : isEditing ? 'cursor-pointer hover:bg-blue-50' : ''}`}
+                      onClick={isEditing && !uploading ? handleAvatarClick : undefined}
+                      style={{ pointerEvents: isEditing && !uploading ? 'auto' : 'none' }}
                     >
                       <span className="text-center px-2">Bấm vào để tải ảnh đại diện</span>
                     </div>
@@ -228,7 +255,7 @@ const ParentSetting = ({ user }) => {
                     onChange={handleAvatarChange}
                     className="hidden"
                     tabIndex={-1}
-                    disabled={uploading}
+                    disabled={uploading || !isEditing}
                   />
                 </div>
               </div>
@@ -236,7 +263,7 @@ const ParentSetting = ({ user }) => {
               <div className="flex-1">
                 <div className="mb-4">
                   <div className="text-2xl font-bold text-gray-800 mb-1">{profileForm.fullname}</div>
-                  <div className="text-gray-500 text-sm mb-2">{profileForm.username}</div>
+                  <div className="text-base md:text-lg font-semibold bg-gray-100 text-gray-700 rounded px-4 py-2 mb-2 inline-block">{profileForm.username}</div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
@@ -247,18 +274,21 @@ const ParentSetting = ({ user }) => {
                       value={profileForm.email}
                       onChange={handleProfileChange}
                       required
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                      disabled={!isEditing}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white disabled:bg-gray-100"
                     />
                   </div>
-                  <div>
-                    <button
-                      type="button"
-                      className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 mt-6"
-                      onClick={() => setShowChangePasswordModal(true)}
-                    >
-                      Đổi mật khẩu
-                    </button>
-                  </div>
+                  {isEditing && (
+                    <div>
+                      <button
+                        type="button"
+                        className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 mt-6"
+                        onClick={() => setShowChangePasswordModal(true)}
+                      >
+                        Đổi mật khẩu
+                      </button>
+                    </div>
+                  )}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Số điện thoại</label>
                     <input
@@ -267,7 +297,8 @@ const ParentSetting = ({ user }) => {
                       value={profileForm.phonenumber}
                       onChange={handleProfileChange}
                       required
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                      disabled={!isEditing}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white disabled:bg-gray-100"
                     />
                   </div>
                   <div className="md:col-span-2">
@@ -277,30 +308,41 @@ const ParentSetting = ({ user }) => {
                       value={profileForm.address}
                       onChange={handleProfileChange}
                       rows="2"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                      disabled={!isEditing}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white disabled:bg-gray-100"
                     />
                   </div>
                 </div>
                 {formError && <div className="text-red-600 text-sm mt-2">{formError}</div>}
-                <div className="mt-6 flex justify-end">
-                  <button
-                    type="submit"
-                    disabled={isUpdating}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-                  >
-                    {isUpdating ? (
-                      <>
-                        <FaSave className="inline mr-2" />
-                        Đang lưu...
-                      </>
-                    ) : (
-                      <>
-                        <FaSave className="inline mr-2" />
-                        Lưu thay đổi
-                      </>
-                    )}
-                  </button>
-                </div>
+                {isEditing && (
+                  <div className="mt-6 flex justify-end">
+                    <button
+                      type="submit"
+                      disabled={!isDirty || isUpdating}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                    >
+                      {isUpdating ? (
+                        <>
+                          <FaSave className="inline mr-2" />
+                          Đang lưu...
+                        </>
+                      ) : (
+                        <>
+                          <FaSave className="inline mr-2" />
+                          Lưu thay đổi
+                        </>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      className="ml-2 px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+                      onClick={() => { setIsEditing(false); setFormError(""); setProfileForm(initialProfileForm); }}
+                      disabled={isUpdating}
+                    >
+                      Hủy
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </form>
