@@ -287,15 +287,20 @@ const AdminSetting = ({
   };
 
   const confirmBanUser = async () => {
-    if (!userToBan) return;
+    if (!userToBan || !userToBan.userid) {
+      toast.error("Không xác định được tài khoản cần thao tác.");
+      setIsBanning(false);
+      setShowBanModal(false);
+      setUserToBan(null);
+      return;
+    }
     setIsBanning(true);
     try {
-      // Use the same ban endpoint for both ban and unban
       const banData = {
         status: userToBan.action === "ban" ? false : true, // false for ban, true for unban
       };
       const response = await fetch(
-        `${API_URL}/api/user-accounts/${userToBan.userId}/ban`,
+        `${API_URL}/api/user-accounts/${userToBan.userid}/ban-toggle`,
         {
           method: "PUT",
           headers: {
@@ -442,72 +447,25 @@ const AdminSetting = ({
                 <div className="flex flex-col items-center">
                   <div className="relative">
                     {avatarUrl ? (
-                      <div className="relative">
+                      <div className="relative flex flex-col items-center">
                         <img
                           src={avatarUrl}
                           alt="avatar"
-                          className={`w-32 h-32 rounded-full object-cover border-4 border-blue-200 shadow mb-2 transition-all ${
-                            uploading
-                              ? "opacity-60 cursor-not-allowed"
-                              : "cursor-pointer"
-                          }`}
+                          className={`w-32 h-32 rounded-full object-cover border-4 border-blue-200 shadow mb-2 transition-all ${uploading ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
                           onClick={isEditing && !uploading ? handleAvatarClick : undefined}
-                          style={{ pointerEvents: isEditing && !uploading ? "auto" : "none" }}
+                          style={{ pointerEvents: isEditing && !uploading ? 'auto' : 'none' }}
                         />
                         {isEditing && !uploading && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setAvatarUrl('');
-                              setAvatarFile(null);
-                              setAvatarRemoved(true);
-                            }}
-                            className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors duration-200"
-                            title="Xóa ảnh đại diện"
-                          >
-                            ×
-                          </button>
+                          <span className="text-md text-black-100 mt-1">Bấm vào để đổi ảnh đại diện</span>
                         )}
                       </div>
                     ) : (
                       <div
-                        className={`w-32 h-32 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 border-2 border-dashed border-blue-300 mb-2 ${
-                          uploading
-                            ? "opacity-60 cursor-not-allowed"
-                            : isEditing
-                            ? "cursor-pointer hover:bg-blue-50"
-                            : ""
-                        }`}
+                        className={`w-32 h-32 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 border-2 border-dashed border-blue-300 mb-2 ${uploading ? 'opacity-60 cursor-not-allowed' : isEditing ? 'cursor-pointer hover:bg-blue-50' : ''}`}
                         onClick={isEditing && !uploading ? handleAvatarClick : undefined}
-                        style={{ pointerEvents: isEditing && !uploading ? "auto" : "none" }}
+                        style={{ pointerEvents: isEditing && !uploading ? 'auto' : 'none' }}
                       >
-                        <span className="text-center px-2">
-                          Bấm vào để tải ảnh đại diện
-                        </span>
-                      </div>
-                    )}
-                    {uploading && (
-                      <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-60 rounded-full">
-                        <svg
-                          className="animate-spin h-8 w-8 text-blue-500"
-                          xmlns="http://www.w3.org/2000/svg"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                        >
-                          <circle
-                            className="opacity-25"
-                            cx="12"
-                            cy="12"
-                            r="10"
-                            stroke="currentColor"
-                            strokeWidth="4"
-                          ></circle>
-                          <path
-                            className="opacity-75"
-                            fill="currentColor"
-                            d="M4 12a8 8 0 018-8v8z"
-                          ></path>
-                        </svg>
+                        <span className="text-center px-2">Bấm vào để tải ảnh đại diện</span>
                       </div>
                     )}
                     <input
