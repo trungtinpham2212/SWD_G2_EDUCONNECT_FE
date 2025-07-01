@@ -11,6 +11,10 @@ const Schedule = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) =>
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const navigate = useNavigate();
+  const [schoolYears, setSchoolYears] = useState([]);
+  const [selectedSchoolYear, setSelectedSchoolYear] = useState(null);
+  const [weeks, setWeeks] = useState([]);
+  const [selectedWeek, setSelectedWeek] = useState(null);
 
   // Define time slots for each period
   const timeSlots = [
@@ -24,28 +28,65 @@ const Schedule = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) =>
     { period: 8, start: '16:00', end: '16:45' }
   ];
 
-  // Get start and end of the week (Monday to Sunday)
-  const getWeekDates = (date) => {
-    const start = new Date(date);
-    const day = start.getDay();
-    const diff = start.getDate() - day + (day === 0 ? -6 : 1);
-    start.setDate(diff);
-    start.setHours(0, 0, 0, 0);
-    
-    const end = new Date(start);
-    end.setDate(start.getDate() + 6);
-    end.setHours(23, 59, 59, 999);
-    return { start, end };
-  };
+  // Fetch school years
+  useEffect(() => {
+    const fetchSchoolYears = async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/school-years`);
+        const data = await res.json();
+        setSchoolYears(data);
+        // Mặc định chọn năm học chứa ngày 2/12/2024
+        const defaultDate = new Date('2024-12-02');
+        let foundYear = data.find(sy => {
+          const [startYear, endYear] = sy.year.split('-').map(Number);
+          const start = new Date(`${startYear}-09-02`);
+          const end = new Date(`${endYear}-05-31`);
+          return defaultDate >= start && defaultDate <= end;
+        });
+        if (!foundYear && data.length > 0) foundYear = data[0];
+        setSelectedSchoolYear(foundYear?.schoolyearid || null);
+      } catch {}
+    };
+    fetchSchoolYears();
+  }, []);
 
-  // Format date to YYYY-MM-DD (local, not UTC)
-  const formatDate = (date) => {
-    // Lấy đúng ngày local, không bị lệch múi giờ
-    const year = date.getFullYear();
-    const month = (date.getMonth() + 1).toString().padStart(2, '0');
-    const day = date.getDate().toString().padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
+  // Khi chọn năm học, sinh lại danh sách tuần
+  useEffect(() => {
+    if (!selectedSchoolYear || !schoolYears.length) return;
+    const sy = schoolYears.find(sy => sy.schoolyearid === selectedSchoolYear);
+    if (!sy) return;
+    // generateWeeksForSchoolYear
+    const [startYear, endYear] = sy.year.split('-').map(Number);
+    const startDate = new Date(`${startYear}-09-02`);
+    const endDate = new Date(`${endYear}-05-31`);
+    const genWeeks = [];
+    let current = new Date(startDate);
+    let weekNumber = 1;
+    while (current <= endDate) {
+      const weekStart = new Date(current);
+      const weekEnd = new Date(current);
+      weekEnd.setDate(weekEnd.getDate() + 6);
+      const label = `Tuần ${weekNumber} (${weekStart.toLocaleDateString('vi-VN')} - ${weekEnd.toLocaleDateString('vi-VN')})`;
+      genWeeks.push({
+        label,
+        start: weekStart.toISOString().split('T')[0],
+        end: weekEnd.toISOString().split('T')[0],
+        weekNumber
+      });
+      current.setDate(current.getDate() + 7);
+      weekNumber++;
+    }
+    setWeeks(genWeeks);
+    // Mặc định chọn tuần chứa 2/12/2024 nếu có, không thì tuần đầu tiên
+    const defaultDate = new Date('2024-12-02');
+    let foundWeek = genWeeks.find(w => {
+      const start = new Date(w.start);
+      const end = new Date(w.end);
+      return defaultDate >= start && defaultDate <= end;
+    });
+    if (!foundWeek && genWeeks.length > 0) foundWeek = genWeeks[0];
+    setSelectedWeek(foundWeek || null);
+  }, [selectedSchoolYear, schoolYears]);
 
   // Fetch subjects and classes
   useEffect(() => {
@@ -62,29 +103,22 @@ const Schedule = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) =>
     fetchSubjectsAndClasses();
   }, []);
 
-  // Fetch sections
+  // Lấy teacherId từ user prop hoặc localStorage
+  const teacherId = user?.teacherId || Number(localStorage.getItem('teacherId'));
+
+  // Fetch sections theo tuần đã chọn
   useEffect(() => {
     const fetchSections = async () => {
       try {
         setLoading(true);
-        const response = await fetch(`${API_URL}/api/periods`);
+        if (!selectedWeek || !teacherId) return;
+        const url = `${API_URL}/api/periods/by-range?startDate=${selectedWeek.start}&endDate=${selectedWeek.end}&teacherId=${teacherId}`;
+        const response = await fetch(url);
         if (!response.ok) {
           throw new Error('Failed to fetch schedule data');
         }
         const data = await response.json();
-        // Filter sections for the current week and teacher
-        const { start, end } = getWeekDates(currentWeek);
-        const startStr = formatDate(start);
-        const endStr = formatDate(end);
-        const filteredSections = data.filter(section => {
-          // Lấy phần ngày từ perioddate (YYYY-MM-DD)
-          const sectionDateStr = section.perioddate.split('T')[0];
-          // So sánh chuỗi ngày thay vì đối tượng Date để tránh lệch múi giờ
-          const isInWeek = sectionDateStr >= startStr && sectionDateStr <= endStr;
-          const isTeacherMatch = Number(section.teacherid) === Number(user?.teacherId);
-          return isInWeek && isTeacherMatch;
-        });
-        setSections(filteredSections);
+        setSections(data);
         setError(null);
       } catch (err) {
         setError('Không thể tải lịch giảng dạy. Vui lòng thử lại sau.');
@@ -93,10 +127,10 @@ const Schedule = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) =>
         setLoading(false);
       }
     };
-    if (user?.teacherId) {
+    if (teacherId && selectedWeek) {
       fetchSections();
     }
-  }, [currentWeek, user?.teacherId]);
+  }, [teacherId, selectedWeek]);
 
   const navigateWeek = (direction) => {
     const newDate = new Date(currentWeek);
@@ -104,49 +138,38 @@ const Schedule = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) =>
     setCurrentWeek(newDate);
   };
 
-  const getDayName = (date) => {
-    const days = ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'];
-    return days[date.getDay()];
-  };
+  // Helper lấy tên môn học và tên lớp từ dữ liệu trả về
+  const getSubjectName = (subjectid, section) => section.subjectName || `Môn ${subjectid}`;
+  const getClassName = (classid, section) => section.className || `Lớp ${classid}`;
 
-  const formatDateVN = (date) => {
-    const day = date.getDate().toString().padStart(2, '0');
-    const month = (date.getMonth() + 1).toString().padStart(2, '0');
-    return `${day}/${month}`;
-  };
-
-  // Helper lấy tên môn học và tên lớp
-  const getSubjectName = (subjectid) => {
-    const subject = subjects.find(s => s.subjectid === subjectid);
-    return subject ? subject.subjectname : `Môn ${subjectid}`;
-  };
-  const getClassName = (classid) => {
-    const cls = classes.find(c => c.classid === classid);
-    return cls ? cls.classname : `Lớp ${classid}`;
-  };
-
-  const handleClassClick = (periodid) => {
-    navigate(`/session/${periodid}`);
-  };
-
-  const renderWeekHeader = () => {
-    const { start } = getWeekDates(currentWeek);
+  // Tạo mảng ngày trong tuần từ selectedWeek
+  const getWeekDatesArray = () => {
+    if (!selectedWeek) return [];
     const days = [];
+    const start = new Date(selectedWeek.start);
     for (let i = 0; i < 7; i++) {
       const date = new Date(start);
       date.setDate(start.getDate() + i);
-      days.push(
-        <div key={i} className="flex-1 min-w-[130px] text-center p-3 border-b border-r">
-          <div className="font-semibold text-gray-800">{getDayName(date)}</div>
-          <div className="text-sm text-gray-600">{formatDateVN(date)}</div>
-        </div>
-      );
+      days.push(date);
     }
     return days;
   };
 
+  // Render lại header ngày trong tuần
+  const renderWeekHeader = () => {
+    const days = getWeekDatesArray();
+    const dayNames = ['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'Chủ nhật'];
+    return days.map((date, i) => (
+      <div key={i} className="flex-1 min-w-[130px] text-center p-3 border-b border-r">
+        <div className="font-semibold text-gray-800">{dayNames[i]}</div>
+        <div className="text-sm text-gray-600">{date.toLocaleDateString('vi-VN')}</div>
+      </div>
+    ));
+  };
+
+  // Render lại grid tiết học chỉ dựa vào dữ liệu API
   const renderScheduleGrid = () => {
-    const { start } = getWeekDates(currentWeek);
+    const days = getWeekDatesArray();
     return timeSlots.map((slot) => (
       <div key={slot.period} className="flex min-w-full border-b">
         <div className="w-[120px] shrink-0 p-3 text-center border-r bg-gray-50">
@@ -155,24 +178,24 @@ const Schedule = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) =>
             {slot.start} - {slot.end}
           </div>
         </div>
-        {Array.from({ length: 7 }, (_, dayIndex) => {
-          const date = new Date(start);
-          date.setDate(start.getDate() + dayIndex);
-          const cellDateStr = formatDate(date); // YYYY-MM-DD
-          // Find section for this time slot and day
-          const section = sections.find(section => {
-            const sectionDateStr = section.perioddate.split('T')[0];
-            return sectionDateStr === cellDateStr && Number(section.periodno) === Number(slot.period);
-          });
+        {days.map((date, dayIndex) => {
+          // Tìm section đúng ngày và tiết
+          const dateStr = date.toISOString().split('T')[0];
+          const section = sections.find(
+            s => s.periodno === slot.period && s.perioddate.startsWith(dateStr)
+          );
           return (
             <div key={dayIndex} className="flex-1 min-w-[130px] p-2 border-r hover:bg-gray-50">
               {section && (
-                <div className="h-full p-2 rounded bg-blue-100 text-sm transition-colors hover:bg-blue-200">
-                  <div className="font-medium text-blue-900 cursor-pointer hover:underline" onClick={() => handleClassClick(section.periodid)}>
-                    {getClassName(section.classid)}
+                <div
+                  className="h-full p-2 rounded bg-blue-100 text-sm transition-colors hover:bg-blue-200 cursor-pointer"
+                  onClick={() => navigate(`/session/${section.periodid}`)}
+                >
+                  <div className="font-medium text-blue-900 hover:underline">
+                    {getClassName(section.classid, section)}
                   </div>
                   <div className="text-xs text-gray-600">
-                    {getSubjectName(section.subjectid)}
+                    {getSubjectName(section.subjectid, section)}
                   </div>
                 </div>
               )}
@@ -185,8 +208,36 @@ const Schedule = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) =>
 
   return (
     <div className="flex-1 p-4 overflow-hidden">
-      <div className="flex justify-between items-center mb-4">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
         <h2 className="text-2xl font-semibold text-gray-800">Lịch giảng dạy</h2>
+        <div className="flex flex-wrap gap-2 items-center">
+          <label className="text-sm font-medium">Năm học:</label>
+          <select
+            value={selectedSchoolYear || ''}
+            onChange={e => setSelectedSchoolYear(Number(e.target.value))}
+            className="px-2 py-1 border rounded"
+          >
+            {schoolYears.map(sy => (
+              <option key={sy.schoolyearid} value={sy.schoolyearid}>{sy.year}</option>
+            ))}
+          </select>
+          <label className="text-sm font-medium ml-2">Tuần:</label>
+          <select
+            value={selectedWeek?.start || ''}
+            onChange={e => {
+              const week = weeks.find(w => w.start === e.target.value);
+              setSelectedWeek(week || null);
+            }}
+            className="px-2 py-1 border rounded"
+            disabled={!weeks.length}
+          >
+            {weeks.map(week => (
+              <option key={week.start} value={week.start}>{week.label}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+      <div className="flex justify-between items-center mb-4">
         <div className="flex items-center space-x-4">
           <button
             onClick={() => navigateWeek('prev')}
@@ -197,7 +248,7 @@ const Schedule = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) =>
           <div className="flex items-center bg-white px-4 py-2 rounded-lg shadow-sm">
             <FaCalendarAlt className="mr-2 text-blue-600" />
             <span className="font-medium">
-              {formatDateVN(getWeekDates(currentWeek).start)} - {formatDateVN(getWeekDates(currentWeek).end)}
+              {selectedWeek?.label}
             </span>
           </div>
           <button

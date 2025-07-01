@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import API_URL from '../../config/api';
-import { FaSearch, FaEye, FaCalendarAlt, FaFileAlt } from 'react-icons/fa';
+import { FaSearch, FaEye, FaCalendarAlt, FaFileAlt, FaPlus, FaUserGraduate } from 'react-icons/fa';
 import { useNavigate } from 'react-router-dom';
+import dayjs from 'dayjs';
 
 const ReportManagement = ({ user }) => {
   const [reportGroups, setReportGroups] = useState([]);
@@ -10,6 +11,13 @@ const ReportManagement = ({ user }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedGroup, setSelectedGroup] = useState(null);
   const navigate = useNavigate();
+  const [showModal, setShowModal] = useState(false);
+  const [students, setStudents] = useState([]);
+  const [homeroomClass, setHomeroomClass] = useState(null);
+  const [selectedStudents, setSelectedStudents] = useState([]);
+  const [startDate, setStartDate] = useState(dayjs().format('YYYY-MM-DD'));
+  const [endDate, setEndDate] = useState(dayjs().format('YYYY-MM-DD'));
+  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
     const fetchGroups = async () => {
@@ -28,6 +36,25 @@ const ReportManagement = ({ user }) => {
       }
     };
     fetchGroups();
+
+    // Lấy danh sách học sinh lớp chủ nhiệm
+    const fetchHomeroom = async () => {
+      try {
+        const classRes = await fetch(`${API_URL}/api/classes`);
+        const classData = await classRes.json();
+        const foundClass = classData.find(cls => cls.teacherhomeroomid === user.teacherId);
+        setHomeroomClass(foundClass || null);
+        if (foundClass) {
+          const studentRes = await fetch(`${API_URL}/api/students`);
+          const studentData = await studentRes.json();
+          const filtered = studentData.filter(s => s.classid === foundClass.classid);
+          setStudents(filtered);
+        } else {
+          setStudents([]);
+        }
+      } catch {}
+    };
+    fetchHomeroom();
   }, [user]);
 
   const formatDate = (dateStr) => {
@@ -49,6 +76,47 @@ const ReportManagement = ({ user }) => {
     return text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
   }
 
+  const openCreateModal = () => {
+    setSelectedStudents(students.map(s => s.studentid));
+    setStartDate(dayjs().format('YYYY-MM-DD'));
+    setEndDate(dayjs().format('YYYY-MM-DD'));
+    setShowModal(true);
+  };
+
+  const handleStudentToggle = (id) => {
+    setSelectedStudents(prev => prev.includes(id) ? prev.filter(sid => sid !== id) : [...prev, id]);
+  };
+
+  const handleCreateReport = async () => {
+    setCreating(true);
+    try {
+      const body = {
+        teacherId: user.teacherId,
+        studentIds: selectedStudents,
+        startDate: dayjs(startDate).toISOString(),
+        endDate: dayjs(endDate).toISOString(),
+      };
+      const res = await fetch(`${API_URL}/api/report-groups/ai-generate-group-report`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error('Tạo báo cáo thất bại');
+      setShowModal(false);
+      setSelectedStudents([]);
+      setStartDate(dayjs().format('YYYY-MM-DD'));
+      setEndDate(dayjs().format('YYYY-MM-DD'));
+      // Reload group list
+      const teacherId = user?.teacherId || localStorage.getItem('teacherId');
+      const reload = await fetch(`${API_URL}/api/report-groups/teacher/${teacherId}`);
+      setReportGroups(await reload.json());
+    } catch (e) {
+      alert(e.message || 'Tạo báo cáo thất bại');
+    } finally {
+      setCreating(false);
+    }
+  };
+
   return (
     <div className="flex-1 p-6">
       <h2 className="text-2xl font-semibold mb-6 flex items-center gap-2">
@@ -65,7 +133,51 @@ const ReportManagement = ({ user }) => {
             className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
+        <button
+          className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+          onClick={openCreateModal}
+        >
+          <FaPlus /> Tạo báo cáo
+        </button>
       </div>
+      {/* Modal tạo báo cáo */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-lg relative">
+            <button className="absolute top-2 right-2 text-gray-400 hover:text-gray-600" onClick={()=>setShowModal(false)}>&times;</button>
+            <h3 className="text-lg font-semibold mb-4 flex items-center gap-2"><FaFileAlt /> Tạo báo cáo mới</h3>
+            <div className="mb-3">
+              <label className="block text-sm font-medium mb-1">Chọn học sinh</label>
+              <div className="max-h-40 overflow-y-auto border rounded p-2">
+                {students.map(stu => (
+                  <label key={stu.studentid} className="flex items-center gap-2 mb-1 cursor-pointer">
+                    <input type="checkbox" checked={selectedStudents.includes(stu.studentid)} onChange={()=>handleStudentToggle(stu.studentid)} />
+                    <FaUserGraduate className="text-blue-500" />
+                    <span>{stu.name}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="mb-3 flex gap-2">
+              <div className="flex-1">
+                <label className="block text-sm font-medium mb-1">Từ ngày</label>
+                <input type="date" className="border rounded px-2 py-1 w-full" value={startDate} onChange={e=>setStartDate(e.target.value)} />
+              </div>
+              <div className="flex-1">
+                <label className="block text-sm font-medium mb-1">Đến ngày</label>
+                <input type="date" className="border rounded px-2 py-1 w-full" value={endDate} onChange={e=>setEndDate(e.target.value)} />
+              </div>
+            </div>
+            <button
+              className="w-full py-2 bg-blue-500 text-white rounded hover:bg-blue-600 mt-2 disabled:opacity-60"
+              onClick={handleCreateReport}
+              disabled={creating || selectedStudents.length === 0}
+            >
+              {creating ? 'Đang tạo...' : 'Tạo báo cáo'}
+            </button>
+          </div>
+        </div>
+      )}
       {loading ? (
         <div className="flex justify-center items-center py-12">
           <span className="animate-spin text-3xl text-blue-500 mr-2">⏳</span> Đang tải báo cáo...
