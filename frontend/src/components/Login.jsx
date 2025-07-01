@@ -25,7 +25,7 @@ const Login = ({ setUser }) => {
     e.preventDefault();
     setIsLoading(true);
     try {
-      const response = await fetch(`${API_URL}/auth/login`, {
+      const response = await fetch(`${API_URL}/api/user-accounts/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
