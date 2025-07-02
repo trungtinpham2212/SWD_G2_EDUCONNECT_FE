@@ -237,28 +237,7 @@ const Schedule = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) =>
           </select>
         </div>
       </div>
-      <div className="flex justify-between items-center mb-4">
-        <div className="flex items-center space-x-4">
-          <button
-            onClick={() => navigateWeek('prev')}
-            className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
-          >
-            <FaChevronLeft className="text-gray-600" />
-          </button>
-          <div className="flex items-center bg-white px-4 py-2 rounded-lg shadow-sm">
-            <FaCalendarAlt className="mr-2 text-blue-600" />
-            <span className="font-medium">
-              {selectedWeek?.label}
-            </span>
-          </div>
-          <button
-            onClick={() => navigateWeek('next')}
-            className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
-          >
-            <FaChevronRight className="text-gray-600" />
-          </button>
-        </div>
-      </div>
+      
 
       {loading ? (
         <div className="text-center py-8">

@@ -14,6 +14,7 @@ const TeacherSetting = ({ user }) => {
   const [formError, setFormError] = useState('');
   const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
   const [changePasswordLoading, setChangePasswordLoading] = useState(false);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -141,30 +142,55 @@ const TeacherSetting = ({ user }) => {
   const handleUpdatePassword = async (e) => {
     e.preventDefault();
     setFormError('');
+    setShowConfirmModal(true);
+  };
+
+  const handleConfirmChangePassword = async () => {
+    setChangePasswordLoading(true);
+    
+    // Kiểm tra tất cả điều kiện trước khi đổi mật khẩu
     if (!profileForm.currentPassword) {
-      setFormError('Vui lòng nhập mật khẩu hiện tại.');
+      toast.error("Vui lòng nhập mật khẩu hiện tại.");
+      setChangePasswordLoading(false);
+      setShowConfirmModal(false);
       return;
     }
     if (!profileForm.password) {
-      setFormError('Vui lòng nhập mật khẩu mới.');
+      toast.error("Vui lòng nhập mật khẩu mới.");
+      setChangePasswordLoading(false);
+      setShowConfirmModal(false);
       return;
     }
     if (profileForm.password !== profileForm.confirmPassword) {
-      setFormError('Mật khẩu mới và xác nhận không trùng khớp.');
-      return;
-    }
-    setChangePasswordLoading(true);
-    // Dùng auth/login để xác thực mật khẩu hiện tại
-    const verifyRes = await fetch(`${API_URL}/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: profileForm.username, password: profileForm.currentPassword })
-    });
-    if (!verifyRes.ok) {
-      setFormError('Mật khẩu hiện tại không đúng.');
+      toast.error("Mật khẩu mới và xác nhận không trùng khớp.");
       setChangePasswordLoading(false);
+      setShowConfirmModal(false);
       return;
     }
+    if (profileForm.currentPassword === profileForm.password) {
+      toast.error('Mật khẩu mới không được trùng với mật khẩu hiện tại.');
+      setChangePasswordLoading(false);
+      setShowConfirmModal(false);
+      return;
+    }
+    
+    // Xác thực mật khẩu hiện tại với server
+    const verifyRes = await fetch(`${API_URL}/api/user-accounts/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: profileForm.username,
+        password: profileForm.currentPassword,
+      }),
+    });
+    
+    if (!verifyRes.ok) {
+      toast.error("Mật khẩu hiện tại không đúng.");
+      setChangePasswordLoading(false);
+      setShowConfirmModal(false);
+      return;
+    }
+    
     try {
       const formData = new FormData();
       formData.append('userId', user.userId.toString());
@@ -175,26 +201,44 @@ const TeacherSetting = ({ user }) => {
       formData.append('username', profileForm.username);
       if (avatarFile) {
         formData.append('avatarFile', avatarFile);
-      } else if (avatarUrl) {
+      } else if (avatarUrl && avatarUrl !== '') {
         formData.append('avatarurl', avatarUrl);
+      } else {
+        formData.append('removeAvatar', 'true');
       }
       formData.append('password', profileForm.password);
+      
       const response = await fetch(`${API_URL}/api/user-accounts/${user.userId}`, {
         method: 'PUT',
         body: formData
       });
+      
       let text = await response.text();
       const normalized = text.replace(/"/g, '').trim();
+      
       if (response.ok || normalized.toLowerCase().includes('success') || normalized.includes('Update successful')) {
-        toast.success('Đổi mật khẩu thành công!');
+        toast.success('Đổi mật khẩu thành công! Bạn sẽ được chuyển về trang đăng nhập trong 2 giây.');
         setProfileForm(prev => ({ ...prev, currentPassword: '', password: '', confirmPassword: '' }));
         setShowChangePasswordModal(false);
+        setShowConfirmModal(false);
+        setIsEditing(false);
+        setAvatarFile(null);
+        setAvatarRemoved(false);
+        
+        // Đợi 2 giây rồi logout
+        setTimeout(() => {
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          window.location.href = '/login';
+        }, 2000);
       } else {
         toast.error('Lỗi khi đổi mật khẩu: ' + normalized);
+        setShowConfirmModal(false);
       }
     } catch (error) {
       console.error('Error updating password:', error);
       toast.error('Có lỗi xảy ra khi đổi mật khẩu');
+      setShowConfirmModal(false);
     } finally {
       setChangePasswordLoading(false);
     }
@@ -466,26 +510,63 @@ const TeacherSetting = ({ user }) => {
                 </button>
                 <button
                   type="submit"
-                  disabled={changePasswordLoading}
+                  disabled={!profileForm.currentPassword || !profileForm.password || !profileForm.confirmPassword}
                   className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 flex items-center justify-center"
                 >
-                  {changePasswordLoading ? (
-                    <>
-                      <svg className="animate-spin h-5 w-5 mr-2 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
-                      </svg>
-                      Đang lưu...
-                    </>
-                  ) : (
-                    <>
-                      <FaSave className="inline mr-2" />
-                      Đổi mật khẩu
-                    </>
-                  )}
+                  <FaSave className="inline mr-2" />
+                  Tiếp tục
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* Modal xác nhận đổi mật khẩu */}
+      {showConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+          <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md relative">
+            <button
+              className="absolute top-2 right-2 text-gray-400 hover:text-gray-600 text-xl"
+              onClick={() => setShowConfirmModal(false)}
+              aria-label="Đóng"
+            >
+              &times;
+            </button>
+            <h3 className="text-lg font-semibold mb-4 text-center">
+              Xác nhận đổi mật khẩu
+            </h3>
+            <div className="text-center mb-6">
+              <p className="text-gray-700">
+                Bạn có chắc chắn muốn đổi mật khẩu? Bạn sẽ bị đăng xuất khỏi hệ thống sau khi đổi mật khẩu.
+              </p>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+                onClick={() => setShowConfirmModal(false)}
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmChangePassword}
+                disabled={changePasswordLoading}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 flex items-center justify-center"
+              >
+                {changePasswordLoading ? (
+                  <>
+                    <svg className="animate-spin h-5 w-5 mr-2 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
+                    </svg>
+                    Đang xử lý...
+                  </>
+                ) : (
+                  'Đổi mật khẩu'
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

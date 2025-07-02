@@ -10,7 +10,7 @@ const TeacherManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
   const [classes, setClasses] = useState([]);
   const [schoolYears, setSchoolYears] = useState([]);
   const [sections, setSections] = useState([]);
-  const [evaluations, setEvaluations] = useState([]);
+  // const [evaluations, setEvaluations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showModal, setShowModal] = useState(false);
@@ -40,8 +40,8 @@ const TeacherManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
         fetch(`${API_URL}/api/subjects`),
         fetch(`${API_URL}/api/classes`),
         fetch(`${API_URL}/api/school-years`),
-        fetch(`${API_URL}/api/periods`),
-        fetch(`${API_URL}/api/evaluations`)
+        fetch(`${API_URL}/api/periods`)
+        // fetch(`${API_URL}/api/evaluations`)
       ]);
       const userData = await userRes.json();
       const teacherData = await teacherRes.json();
@@ -49,7 +49,7 @@ const TeacherManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
       const classData = await classRes.json();
       const yearData = await yearRes.json();
       const sectionData = await sectionRes.json();
-      const evaluationData = await evaluationRes.json();
+      // const evaluationData = await evaluationRes.json();
 
       setUserAccounts(userData.filter(u => u.roleid === 2));
       setTeachers(teacherData);
@@ -57,7 +57,7 @@ const TeacherManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
       setClasses(classData);
       setSchoolYears(yearData);
       setSections(sectionData);
-      setEvaluations(evaluationData);
+      // setEvaluations(evaluationData);
       setError(null);
     } catch (error) {
       console.error(error);
@@ -262,11 +262,11 @@ const TeacherManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
         }
 
         // Kiểm tra đánh giá
-        const hasEvaluations = evaluations.some(e => e.teacherid === teacher.teacherid);
-        if (hasEvaluations) {
-          toast.error('Không thể xóa giáo viên vì có đánh giá được tạo. Vui lòng xóa tất cả đánh giá của giáo viên này trước.');
-          return;
-        }
+        // const hasEvaluations = evaluations.some(e => e.teacherid === teacher.teacherid);
+        // if (hasEvaluations) {
+        //   toast.error('Không thể xóa giáo viên vì có đánh giá được tạo. Vui lòng xóa tất cả đánh giá của giáo viên này trước.');
+        //   return;
+        // }
 
         // Xóa teacher record trước
         const teacherRes = await fetch(`${API_URL}/api/teachers/${teacher.teacherid}`, {
