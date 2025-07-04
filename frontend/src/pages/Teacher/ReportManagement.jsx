@@ -4,6 +4,8 @@ import { FaSearch, FaEye, FaCalendarAlt, FaFileAlt, FaPlus, FaUserGraduate } fro
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
 
+const ITEMS_PER_PAGE = 15;
+
 const ReportManagement = ({ user }) => {
   const [reportGroups, setReportGroups] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -18,6 +20,9 @@ const ReportManagement = ({ user }) => {
   const [startDate, setStartDate] = useState(dayjs().format('YYYY-MM-DD'));
   const [endDate, setEndDate] = useState(dayjs().format('YYYY-MM-DD'));
   const [creating, setCreating] = useState(false);
+  const [totalCount, setTotalCount] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
     const fetchGroups = async () => {
@@ -25,10 +30,14 @@ const ReportManagement = ({ user }) => {
       setError('');
       try {
         const teacherId = user?.teacherId || localStorage.getItem('teacherId');
-        const res = await fetch(`${API_URL}/api/report-groups/teacher/${teacherId}?page=1&pageSize=10`);
+        const res = await fetch(`${API_URL}/api/report-groups/by-teacher/${teacherId}?page=${currentPage}&pageSize=${ITEMS_PER_PAGE}`, {
+          headers: { ...getAuthHeaders() }
+        });
         if (!res.ok) throw new Error('Không thể tải danh sách báo cáo');
         const data = await res.json();
-        setReportGroups(data);
+        setReportGroups(data.items || []);
+        setTotalCount(data.totalCount || 0);
+        setTotalPages(data.totalPages || 1);
       } catch (err) {
         setError(err.message || 'Lỗi không xác định');
       } finally {
@@ -40,22 +49,30 @@ const ReportManagement = ({ user }) => {
     // Lấy danh sách học sinh lớp chủ nhiệm
     const fetchHomeroom = async () => {
       try {
-        const classRes = await fetch(`${API_URL}/api/classes?page=1&pageSize=10`);
-        const classData = await classRes.json();
+        // Lấy tất cả lớp
+        const classRes = await fetch(`${API_URL}/api/classes?page=1&pageSize=100`, {
+          headers: { ...getAuthHeaders() }
+        });
+        const classDataRaw = await classRes.json();
+        const classData = Array.isArray(classDataRaw.items) ? classDataRaw.items : classDataRaw;
         const foundClass = classData.find(cls => cls.teacherhomeroomid === user.teacherId);
         setHomeroomClass(foundClass || null);
         if (foundClass) {
-          const studentRes = await fetch(`${API_URL}/api/students?page=1&pageSize=10`);
+          // Lấy học sinh theo classid
+          const studentRes = await fetch(`${API_URL}/api/students/by-class/${foundClass.classid}`, {
+            headers: { ...getAuthHeaders() }
+          });
           const studentData = await studentRes.json();
-          const filtered = studentData.filter(s => s.classid === foundClass.classid);
-          setStudents(filtered);
+          setStudents(Array.isArray(studentData) ? studentData : []);
         } else {
           setStudents([]);
         }
-      } catch {}
+      } catch {
+        setStudents([]);
+      }
     };
     fetchHomeroom();
-  }, [user]);
+  }, [user, currentPage]);
 
   const formatDate = (dateStr) => {
     if (!dateStr) return '';
@@ -93,12 +110,15 @@ const ReportManagement = ({ user }) => {
       const body = {
         teacherId: user.teacherId,
         studentIds: selectedStudents,
-        startDate: dayjs(startDate).toISOString(),
-        endDate: dayjs(endDate).toISOString(),
+        startDate: startDate,
+        endDate: endDate
       };
       const res = await fetch(`${API_URL}/api/report-groups/ai-generate-group-report`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders()
+        },
         body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error('Tạo báo cáo thất bại');
@@ -108,13 +128,28 @@ const ReportManagement = ({ user }) => {
       setEndDate(dayjs().format('YYYY-MM-DD'));
       // Reload group list
       const teacherId = user?.teacherId || localStorage.getItem('teacherId');
-      const reload = await fetch(`${API_URL}/api/report-groups/teacher/${teacherId}?page=1&pageSize=10`);
-      setReportGroups(await reload.json());
+      const reload = await fetch(`${API_URL}/api/report-groups/by-teacher/${teacherId}?page=1&pageSize=10`, {
+        headers: { ...getAuthHeaders() }
+      });
+      const reloadData = await reload.json();
+      setReportGroups(reloadData.items || []);
+      setTotalCount(reloadData.totalCount || 0);
+      setTotalPages(reloadData.totalPages || 1);
     } catch (e) {
       alert(e.message || 'Tạo báo cáo thất bại');
     } finally {
       setCreating(false);
     }
+  };
+
+  const handlePageChange = (page) => {
+    if (page >= 1 && page <= totalPages) setCurrentPage(page);
+  };
+
+  // Helper lấy token từ localStorage
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem('token');
+    return token ? { Authorization: `Bearer ${token}` } : {};
   };
 
   return (
@@ -148,6 +183,22 @@ const ReportManagement = ({ user }) => {
             <h3 className="text-lg font-semibold mb-4 flex items-center gap-2"><FaFileAlt /> Tạo báo cáo mới</h3>
             <div className="mb-3">
               <label className="block text-sm font-medium mb-1">Chọn học sinh</label>
+              <div className="mb-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={students.length > 0 && selectedStudents.length === students.length}
+                    onChange={e => {
+                      if (e.target.checked) {
+                        setSelectedStudents(students.map(s => s.studentid));
+                      } else {
+                        setSelectedStudents([]);
+                      }
+                    }}
+                  />
+                  <span>Chọn tất cả</span>
+                </label>
+              </div>
               <div className="max-h-40 overflow-y-auto border rounded p-2">
                 {students.map(stu => (
                   <label key={stu.studentid} className="flex items-center gap-2 mb-1 cursor-pointer">
@@ -185,34 +236,48 @@ const ReportManagement = ({ user }) => {
       ) : error ? (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-600">{error}</div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {reportGroups
-            .filter(g => g.title.toLowerCase().includes(searchTerm.toLowerCase()))
-            .map(group => (
-              <div key={group.reportgroupid} className="bg-white rounded-lg shadow-md p-5 flex flex-col gap-2 border hover:shadow-lg transition h-full">
-                <div className="flex items-center gap-2 mb-2 min-h-[40px]">
-                  <FaFileAlt className="text-blue-400" />
-                  <span className="font-semibold text-lg truncate block w-full" title={group.title} dangerouslySetInnerHTML={{__html: boldMarkdown(group.title)}}></span>
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {reportGroups
+              .filter(g => g.title.toLowerCase().includes(searchTerm.toLowerCase()))
+              .map((group, idx) => (
+                <div key={group.reportgroupid} className="bg-white rounded-lg shadow-md p-5 flex flex-col gap-2 border hover:shadow-lg transition h-full">
+                  <div className="flex items-center gap-2 mb-2 min-h-[40px]">
+                    <FaFileAlt className="text-blue-400" />
+                    <span className="font-semibold text-lg truncate block w-full" title={group.title} dangerouslySetInnerHTML={{__html: boldMarkdown(group.title)}}></span>
+                  </div>
+                  <div className="flex items-center gap-2 text-gray-500 text-sm min-h-[28px]">
+                    <FaCalendarAlt /> {formatDate(group.startdate)} - {formatDate(group.enddate)}
+                  </div>
+                  <div className="flex items-center gap-2 text-sm min-h-[32px]">
+                    <span className={`px-2 py-1 rounded-full text-xs font-semibold ${group.status === 'Hoàn thành' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>{getStatusDisplay(group.status)}</span>
+                  </div>
+                  <div className="flex gap-2 mt-auto">
+                    <button
+                      className="flex-1 px-3 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center gap-1 justify-center"
+                      onClick={() => navigate(`/teacher/reports/${group.reportgroupid}`)}
+                    >
+                      <FaEye /> Xem chi tiết
+                    </button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 text-gray-500 text-sm min-h-[28px]">
-                  <FaCalendarAlt /> {formatDate(group.startdate)} - {formatDate(group.enddate)}
-                </div>
-                <div className="flex items-center gap-2 text-sm min-h-[32px]">
-                  <span className={`px-2 py-1 rounded-full text-xs font-semibold ${group.status === 'Hoàn thành' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>{getStatusDisplay(group.status)}</span>
-                </div>
-                <div className="flex gap-2 mt-auto">
-                  <button
-                    className="flex-1 px-3 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center gap-1 justify-center"
-                    onClick={() => navigate(`/teacher/reports/${group.reportgroupid}`)}
-                  >
-                    <FaEye /> Xem chi tiết
-                  </button>
-                </div>
-              </div>
+              ))}
+          </div>
+          <div className="flex items-center gap-2 mt-6">
+            <button onClick={() => handlePageChange(currentPage - 1)} disabled={currentPage === 1} className="px-3 py-1 bg-gray-200 text-gray-500 rounded-md">&lt;</button>
+            {Array.from({ length: totalPages }, (_, i) => (
+              <button
+                key={i + 1}
+                onClick={() => handlePageChange(i + 1)}
+                className={`px-3 py-1 ${currentPage === i + 1 ? 'bg-blue-500 text-white' : 'text-gray-500'} rounded-md`}
+              >
+                {i + 1}
+              </button>
             ))}
-        </div>
+            <button onClick={() => handlePageChange(currentPage + 1)} disabled={currentPage === totalPages} className="px-3 py-1 bg-gray-200 text-gray-500 rounded-md">&gt;</button>
+          </div>
+        </>
       )}
-      <div className="mb-4 text-gray-700 whitespace-pre-line max-h-72 overflow-auto border rounded p-4 bg-gray-50" dangerouslySetInnerHTML={{__html: boldMarkdown(selectedGroup?.content)}}></div>
     </div>
   );
 };

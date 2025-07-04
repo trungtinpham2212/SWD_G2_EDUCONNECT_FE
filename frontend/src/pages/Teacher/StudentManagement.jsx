@@ -2,45 +2,49 @@ import React, { useState, useEffect } from 'react';
 import { FaSearch, FaUserGraduate, FaBirthdayCake, FaUserFriends } from 'react-icons/fa';
 import API_URL from '../../config/api';
 
+// Helper lấy token từ localStorage
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('token');
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
+
 const StudentManagement = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) => {
+  const ITEMS_PER_PAGE = 15;
   const [students, setStudents] = useState([]);
   const [homeroomClass, setHomeroomClass] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [parentAccounts, setParentAccounts] = useState([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        // Fetch all classes (phân trang, mặc định pageSize=10)
-        const classResponse = await fetch(`${API_URL}/api/classes?page=1&pageSize=10`); // TODO: Thay đổi pageSize nếu cần
-        if (!classResponse.ok) {
-          throw new Error('Failed to fetch classes data');
-        }
-        const classData = await classResponse.json();
-        // Tìm lớp mà giáo viên này làm chủ nhiệm
-        const foundClass = classData.find(cls => cls.teacherhomeroomid === user.teacherId);
+        // Fetch danh sách lớp để xác định lớp chủ nhiệm
+        const classRes = await fetch(`${API_URL}/api/classes?page=1&pageSize=100`, { headers: { ...getAuthHeaders() } });
+        const classData = await classRes.json();
+        const foundClass = classData.items ? classData.items.find(cls => cls.teacherhomeroomid === user.teacherId) : classData.find(cls => cls.teacherhomeroomid === user.teacherId);
         setHomeroomClass(foundClass || null);
         if (foundClass) {
-          // Fetch all students (phân trang, mặc định pageSize=10)
-          const studentResponse = await fetch(`${API_URL}/api/students?page=1&pageSize=10`); // TODO: Thay đổi pageSize nếu cần
-          if (!studentResponse.ok) {
-            throw new Error('Failed to fetch students data');
-          }
-          const studentData = await studentResponse.json();
-          // Lọc học sinh thuộc lớp chủ nhiệm
-          const filteredStudents = studentData.filter(student => student.classid === foundClass.classid);
-          setStudents(filteredStudents);
-          // Fetch all parent accounts
-          const parentRes = await fetch(`${API_URL}/api/user-accounts`);
-          const parentData = await parentRes.json();
-          setParentAccounts(parentData);
+          // Fetch học sinh bằng API by-class
+          const studentRes = await fetch(`${API_URL}/api/students/by-class/${foundClass.classid}`, { headers: { ...getAuthHeaders() } });
+          const studentData = await studentRes.json();
+          setStudents(studentData.items || studentData || []);
+          setTotalCount((studentData.items || studentData || []).length);
+          setTotalPages(1);
         } else {
           setStudents([]);
-          setParentAccounts([]);
+          setTotalCount(0);
+          setTotalPages(1);
         }
+        // Fetch all parent accounts
+        const parentRes = await fetch(`${API_URL}/api/user-accounts`, { ...getAuthHeaders() });
+        const parentData = await parentRes.json();
+        setParentAccounts(parentData);
         setError(null);
       } catch (err) {
         setError('Không thể tải dữ liệu. Vui lòng thử lại sau.');
@@ -62,6 +66,10 @@ const StudentManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
   const filteredStudents = students.filter(student =>
     student.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  const handlePageChange = (page) => {
+    if (page >= 1 && page <= totalPages) setCurrentPage(page);
+  };
 
   return (
     <div className="flex-1 p-4 overflow-hidden">
@@ -135,7 +143,7 @@ const StudentManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
                       className="hover:bg-gray-50 transition-colors"
                     >
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {index + 1}
+                        {(currentPage - 1) * ITEMS_PER_PAGE + index + 1}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
@@ -192,8 +200,31 @@ const StudentManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
           </div>
           <div className="px-6 py-4 border-t">
             <p className="text-sm text-gray-600">
-              Tổng số học sinh: {filteredStudents.length}
+              Tổng số học sinh: {totalCount}
             </p>
+          </div>
+          <div className="px-6 py-4 border-t">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => handlePageChange(currentPage - 1)}
+                disabled={currentPage === 1}
+                className="px-3 py-1 bg-gray-200 text-gray-500 rounded-md"
+              >&lt;</button>
+              {Array.from({ length: totalPages }, (_, i) => (
+                <button
+                  key={i + 1}
+                  onClick={() => handlePageChange(i + 1)}
+                  className={`px-3 py-1 ${currentPage === i + 1 ? 'bg-blue-500 text-white' : 'text-gray-500'} rounded-md`}
+                >
+                  {i + 1}
+                </button>
+              ))}
+              <button
+                onClick={() => handlePageChange(currentPage + 1)}
+                disabled={currentPage === totalPages}
+                className="px-3 py-1 bg-gray-200 text-gray-500 rounded-md"
+              >&gt;</button>
+            </div>
           </div>
         </div>
       )}

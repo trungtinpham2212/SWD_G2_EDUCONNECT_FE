@@ -4,7 +4,7 @@ import API_URL from '../../config/api';
 import { useNavigate } from 'react-router-dom';
 
 const Schedule = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) => {
-  const [sections, setSections] = useState([]);
+  const [periods, setperiods] = useState([]);
   const [subjects, setSubjects] = useState([]);
   const [classes, setClasses] = useState([]);
   const [currentWeek, setCurrentWeek] = useState(new Date('2024-12-02'));
@@ -28,11 +28,19 @@ const Schedule = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) =>
     { period: 8, start: '16:00', end: '16:45' }
   ];
 
+  // Helper lấy token từ localStorage
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem('token');
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
+
   // Fetch school years
   useEffect(() => {
     const fetchSchoolYears = async () => {
       try {
-        const res = await fetch(`${API_URL}/api/school-years`);
+        const res = await fetch(`${API_URL}/api/school-years`, {
+          headers: { ...getAuthHeaders() }
+        });
         const data = await res.json();
         setSchoolYears(data);
         // Mặc định chọn năm học chứa ngày 2/12/2024
@@ -93,8 +101,12 @@ const Schedule = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) =>
     const fetchSubjectsAndClasses = async () => {
       try {
         const [subjectRes, classRes] = await Promise.all([
-          fetch(`${API_URL}/api/subjects?page=1&pageSize=10`),
-          fetch(`${API_URL}/api/classes?page=1&pageSize=10`)
+          fetch(`${API_URL}/api/subjects?page=1&pageSize=10`, {
+            headers: { ...getAuthHeaders() }
+          }),
+          fetch(`${API_URL}/api/classes?page=1&pageSize=10`, {
+            headers: { ...getAuthHeaders() }
+          })
         ]);
         setSubjects(await subjectRes.json());
         setClasses(await classRes.json());
@@ -106,30 +118,36 @@ const Schedule = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) =>
   // Lấy teacherId từ user prop hoặc localStorage
   const teacherId = user?.teacherId || Number(localStorage.getItem('teacherId'));
 
-  // Fetch sections theo tuần đã chọn
+  // Helper chuyển ngày sang MM/DD/YYYY
+  function toMMDDYYYY(dateStr) {
+    const d = new Date(dateStr);
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const yyyy = d.getFullYear();
+    return `${mm}/${dd}/${yyyy}`;
+  }
+
+  // Fetch periods theo tuần đã chọn
   useEffect(() => {
-    const fetchSections = async () => {
+    const fetchPeriods = async () => {
       try {
         setLoading(true);
-        if (!selectedWeek || !teacherId) return;
-        const url = `${API_URL}/api/periods/by-range?startDate=${selectedWeek.start}&endDate=${selectedWeek.end}&teacherId=${teacherId}`;
-        const response = await fetch(url);
-        if (!response.ok) {
-          throw new Error('Failed to fetch schedule data');
-        }
+        if (!teacherId || !selectedWeek) return;
+        const url = `${API_URL}/api/periods/by-range?startDate=${toMMDDYYYY(selectedWeek.start)}&endDate=${toMMDDYYYY(selectedWeek.end)}&teacherId=${teacherId}&page=1&pageSize=50`;
+        const response = await fetch(url, {
+          headers: { ...getAuthHeaders() }
+        });
+        if (!response.ok) throw new Error('Failed to fetch schedule data');
         const data = await response.json();
-        setSections(Array.isArray(data.items) ? data.items : []);
+        setperiods(data.items || []);
         setError(null);
       } catch (err) {
-        setError('Không thể tải lịch giảng dạy. Vui lòng thử lại sau.');
-        console.error('Error fetching sections:', err);
+        setError('Không thể tải dữ liệu lịch dạy. Vui lòng thử lại sau.');
       } finally {
         setLoading(false);
       }
     };
-    if (teacherId && selectedWeek) {
-      fetchSections();
-    }
+    fetchPeriods();
   }, [teacherId, selectedWeek]);
 
   const navigateWeek = (direction) => {
@@ -181,7 +199,7 @@ const Schedule = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) =>
         {days.map((date, dayIndex) => {
           // Tìm section đúng ngày và tiết
           const dateStr = date.toISOString().split('T')[0];
-          const section = sections.find(
+          const section = periods.find(
             s => s.periodno === slot.period && s.perioddate.startsWith(dateStr)
           );
           return (

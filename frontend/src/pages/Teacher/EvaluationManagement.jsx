@@ -6,6 +6,50 @@ import 'react-toastify/dist/ReactToastify.css';
 
 const ITEMS_PER_PAGE = 15;
 
+// Helper: lấy ngày đầu tuần (thứ 2) và cuối tuần (chủ nhật) từ 1 ngày bất kỳ
+function getWeekRange(date) {
+  const d = new Date(date);
+  const day = d.getDay();
+  // Thứ 2 là 1, chủ nhật là 0
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  const monday = new Date(d);
+  monday.setDate(d.getDate() + diffToMonday);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  return [monday, sunday];
+}
+
+// Helper: format yyyy-mm-dd
+function formatDate(date) {
+  return date.toISOString().split('T')[0];
+}
+
+// Helper: sinh danh sách tuần cho 1 năm học
+function generateWeeksForSchoolYear(schoolYear) {
+  if (!schoolYear?.year) return [];
+  const [startYear, endYear] = schoolYear.year.split('-').map(Number);
+  const startDate = new Date(`${startYear}-09-02`); // 2/9
+  const endDate = new Date(`${endYear}-05-31`); // cuối tháng 5
+  const weeks = [];
+  let current = new Date(startDate);
+  let weekNumber = 1;
+  while (current <= endDate) {
+    const weekStart = new Date(current);
+    const weekEnd = new Date(current);
+    weekEnd.setDate(weekEnd.getDate() + 6);
+    const label = `Tuần ${weekNumber} (${weekStart.toLocaleDateString('vi-VN')} - ${weekEnd.toLocaleDateString('vi-VN')})`;
+    weeks.push({
+      label,
+      start: weekStart.toISOString().split('T')[0],
+      end: weekEnd.toISOString().split('T')[0],
+      weekNumber
+    });
+    current.setDate(current.getDate() + 7);
+    weekNumber++;
+  }
+  return weeks;
+}
+
 const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) => {
   const [evaluations, setEvaluations] = useState([]);
   const [sections, setSections] = useState([]);
@@ -20,81 +64,111 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
   const [showStudentModal, setShowStudentModal] = useState(false);
   const [modalStudents, setModalStudents] = useState([]);
   const [currentEvaluation, setCurrentEvaluation] = useState(null);
+  const [totalCount, setTotalCount] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [pageSize, setPageSize] = useState(ITEMS_PER_PAGE);
 
   // Thêm state cho filter
   const [selectedClass, setSelectedClass] = useState('all');
   const [selectedType, setSelectedType] = useState('all'); // 'all', 'positive', 'negative'
   const [selectedDate, setSelectedDate] = useState(''); // Thêm filter ngày
 
+  const [classStudentCounts, setClassStudentCounts] = useState({});
+  const [allClasses, setAllClasses] = useState([]); // lưu toàn bộ thông tin lớp
+
+  // Thêm state cho filter và tuần/năm học
+  const [schoolYears, setSchoolYears] = useState([]);
+  const [selectedSchoolYear, setSelectedSchoolYear] = useState(null);
+  const [weeks, setWeeks] = useState([]);
+  const [selectedWeek, setSelectedWeek] = useState(null);
+
+  // Helper lấy token từ localStorage
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem('token');
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
+
+  // Fetch tất cả evaluations của giáo viên khi user?.teacherId thay đổi
   useEffect(() => {
-    const fetchData = async () => {
+    const fetchAllEvaluations = async () => {
       try {
         setLoading(true);
-        
-        const headers = {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        };
-
-        // Lấy tất cả section mà giáo viên này dạy
-        const [sectionRes, classRes, evalRes, activityRes] = await Promise.all([
-          fetch(`${API_URL}/api/periods?page=1&pageSize=10`, { headers }),
-          fetch(`${API_URL}/api/classes?page=1&pageSize=10`, { headers }),
-          fetch(`${API_URL}/api/evaluations/by-teacher/${user?.teacherId}?page=1&pageSize=10`, { headers }),
-          fetch(`${API_URL}/api/activities`, { headers })
-        ]);
-
-        if (!sectionRes.ok || !classRes.ok || !evalRes.ok || !activityRes.ok) {
-          throw new Error('Một hoặc nhiều API call thất bại');
-        }
-
-        const [sectionData, classData, evalData, activities] = await Promise.all([
-          sectionRes.json(),
-          classRes.json(),
-          evalRes.json(),
-          activityRes.json()
-        ]);
-
-        // Lọc section của giáo viên này
-        const mySections = sectionData.filter(sec => Number(sec.teacherid) === Number(user?.teacherId));
-        setSections(mySections);
-        setClasses(classData);
-        setActivities(activities);
-
-        // Không cần lọc lại evaluations nữa, backend đã trả về đúng
-        setEvaluations(evalData);
-
+        setError(null);
+        let all = [];
+        let page = 1;
+        let totalPages = 1;
+        do {
+          const url = `${API_URL}/api/evaluations/by-teacher/${user?.teacherId}?page=${page}&pageSize=50`;
+          const evalRes = await fetch(url, { headers: getAuthHeaders() });
+          if (!evalRes.ok) throw new Error('API call thất bại');
+          const evalData = await evalRes.json();
+          if (Array.isArray(evalData.items)) all = all.concat(evalData.items);
+          totalPages = evalData.totalPages || 1;
+          page++;
+        } while (page <= totalPages);
+        setEvaluations(all);
+        setTotalCount(all.length);
+        setTotalPages(1); // phân trang client
+        setPageSize(ITEMS_PER_PAGE);
         setError(null);
       } catch (err) {
-        console.error('Error in fetchData:', err);
         setError('Không thể tải dữ liệu đánh giá. Vui lòng thử lại sau.');
+        setEvaluations([]);
       } finally {
         setLoading(false);
       }
     };
+    if (user?.teacherId) fetchAllEvaluations();
+  }, [user?.teacherId]);
 
-    if (user?.teacherId) {
-      fetchData();
-    }
-  }, [user?.teacherId, location.pathname]);
+  // Khi đổi tuần/năm học, lọc evaluations trên client
+  const evaluationsInWeek = useMemo(() => {
+    if (!selectedWeek) return evaluations;
+    const start = new Date(selectedWeek.start);
+    const end = new Date(selectedWeek.end);
+    return evaluations.filter(ev => {
+      const periodDate = ev.period?.perioddate ? new Date(ev.period.perioddate) : null;
+      return periodDate && periodDate >= start && periodDate <= end;
+    });
+  }, [evaluations, selectedWeek]);
 
-  // Cache danh sách lớp có đánh giá
-  const classesWithEvaluations = useMemo(() => {
-    const classIds = new Set();
-    evaluations.forEach(ev => {
-      const section = sections.find(s => s.periodid === ev.periodid);
-      if (section) {
-        classIds.add(section.classid);
+  // Dropdown lớp lấy từ evaluationsInWeek
+  const classOptions = useMemo(() => {
+    const map = new Map();
+    evaluationsInWeek.forEach(ev => {
+      const cid = ev.period?.classid;
+      let cname = ev.period?.class?.classname;
+      if (!cname && allClasses.length > 0 && cid) {
+        const found = allClasses.find(c => c.classid === cid);
+        cname = found ? found.classname : `Lớp ${cid}`;
       }
+      if (cid && !map.has(cid)) map.set(cid, cname || `Lớp ${cid}`);
     });
-    return Array.from(classIds).map(id => {
-      const cls = classes.find(c => c.classid === id);
-      return {
-        id: cls?.classid,
-        name: cls ? cls.classname : `Lớp ${id}`
-      };
-    });
-  }, [evaluations, sections, classes]);
+    return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
+  }, [evaluationsInWeek, allClasses]);
+
+  // Lọc evaluations theo lớp và loại đánh giá trên evaluationsInWeek
+  const filteredEvaluations = useMemo(() => {
+    let filtered = [...evaluationsInWeek];
+    if (selectedClass !== 'all') {
+      filtered = filtered.filter(ev => String(ev.period?.classid) === String(selectedClass));
+    }
+    if (selectedType !== 'all') {
+      filtered = filtered.filter(ev => {
+        const activity = activities.find(act => act.activityid === ev.activityid);
+        if (!activity) return false;
+        return selectedType === 'negative' ? activity.isnegative : !activity.isnegative;
+      });
+    }
+    return filtered;
+  }, [evaluationsInWeek, selectedClass, selectedType, activities]);
+
+  const totalFiltered = filteredEvaluations.length;
+  const totalFilteredPages = Math.max(1, Math.ceil(totalFiltered / pageSize));
+  const paginatedEvaluations = filteredEvaluations.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  // Khi đổi filter, reset về trang 1
+  useEffect(() => { setCurrentPage(1); }, [selectedClass, selectedType, selectedWeek, selectedSchoolYear]);
 
   const getSectionInfo = (periodid) => sections.find(sec => Number(sec.periodid) === Number(periodid));
   const getClassName = (classid) => {
@@ -202,16 +276,9 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
     setCurrentPage(1); // Reset về trang 1 khi đổi sort
   };
 
-  const totalPages = Math.ceil(filteredAndSortedEvaluations.length / ITEMS_PER_PAGE);
-  const paginatedEvaluations = filteredAndSortedEvaluations.slice(
-    (currentPage - 1) * ITEMS_PER_PAGE,
-    currentPage * ITEMS_PER_PAGE
-  );
-
-  // Reset trang khi thay đổi filter
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [selectedClass, selectedType, selectedDate]);
+  const handlePageChange = (page) => {
+    if (page >= 1 && page <= totalPages) setCurrentPage(page);
+  };
 
   // Thêm hàm helper để lấy loại đánh giá
   const getEvaluationType = (evaluation) => {
@@ -219,11 +286,134 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
     return activity?.isnegative ? 'negative' : 'positive';
   };
 
+  // Fetch all classes khi load trang
+  useEffect(() => {
+    const fetchAllClasses = async () => {
+      try {
+        // Lấy pageSize lớn để lấy hết lớp (giả sử tối đa 100 lớp)
+        const res = await fetch(`${API_URL}/api/classes?page=1&pageSize=100`, { headers: getAuthHeaders() });
+        const data = await res.json();
+        setAllClasses(Array.isArray(data.items) ? data.items : []);
+      } catch {
+        setAllClasses([]);
+      }
+    };
+    fetchAllClasses();
+  }, []);
+
+  // Fetch evaluations và lấy classid, fetch sĩ số lớp
+  useEffect(() => {
+    if (!evaluations.length) return;
+
+    // Lấy unique classid từ evaluations
+    const classIds = Array.from(new Set(
+      evaluations.map(ev => ev.period?.classid).filter(Boolean)
+    ));
+
+    // Fetch sĩ số từng lớp
+    const fetchClassSizes = async () => {
+      const counts = {};
+      await Promise.all(classIds.map(async (cid) => {
+        try {
+          const res = await fetch(`${API_URL}/api/students/by-class/${cid}`, { headers: getAuthHeaders() });
+          const data = await res.json();
+          counts[cid] = Array.isArray(data) ? data.length : 0;
+        } catch {
+          counts[cid] = 0;
+        }
+      }));
+      setClassStudentCounts(counts);
+    };
+    fetchClassSizes();
+  }, [evaluations]);
+
+  // Fetch school years on mount
+  useEffect(() => {
+    const fetchSchoolYears = async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/school-years`, { headers: getAuthHeaders() });
+        const data = await res.json();
+        setSchoolYears(data);
+        // Mặc định chọn năm học 2024-2025 và tuần chứa ngày 2/12/2024
+        const defaultDate = new Date('2024-12-02');
+        let foundYear = data.find(sy => {
+          const [startYear, endYear] = sy.year.split('-').map(Number);
+          const start = new Date(`${startYear}-09-02`);
+          const end = new Date(`${endYear}-05-31`);
+          return defaultDate >= start && defaultDate <= end;
+        });
+        if (!foundYear && data.length > 0) foundYear = data[0];
+        setSelectedSchoolYear(foundYear?.schoolyearid || null);
+      } catch (err) {
+        setSchoolYears([]);
+      }
+    };
+    fetchSchoolYears();
+  }, []);
+
+  // Khi chọn năm học, sinh lại danh sách tuần
+  useEffect(() => {
+    if (!selectedSchoolYear || !schoolYears.length) return;
+    const sy = schoolYears.find(sy => sy.schoolyearid === selectedSchoolYear);
+    const genWeeks = generateWeeksForSchoolYear(sy);
+    setWeeks(genWeeks);
+    // Mặc định chọn tuần chứa 2/12/2024 nếu có, không thì tuần đầu tiên
+    const defaultDate = new Date('2024-12-02');
+    let foundWeek = genWeeks.find(w => {
+      const start = new Date(w.start);
+      const end = new Date(w.end);
+      return defaultDate >= start && defaultDate <= end;
+    });
+    if (!foundWeek && genWeeks.length > 0) foundWeek = genWeeks[0];
+    setSelectedWeek(foundWeek || null);
+  }, [selectedSchoolYear, schoolYears]);
+
+  // Fetch activities (loại đánh giá)
+  useEffect(() => {
+    const fetchActivities = async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/activities`, { headers: getAuthHeaders() });
+        const data = await res.json();
+        setActivities(Array.isArray(data) ? data : (Array.isArray(data.items) ? data.items : []));
+      } catch {
+        setActivities([]);
+      }
+    };
+    fetchActivities();
+  }, []);
+
   return (
     <div className="flex-1 p-6">
       <h2 className="text-2xl font-semibold mb-6">Quản lý đánh giá</h2>
       <div className="bg-white rounded-lg shadow-md p-6">
-        {/* Thêm phần filter */}
+        {/* Chọn năm học và tuần */}
+        <div className="mb-6 flex flex-col md:flex-row gap-4 items-center">
+          <label className="block text-sm font-medium text-gray-700">Chọn năm học:</label>
+          <select
+            value={selectedSchoolYear || ''}
+            onChange={e => setSelectedSchoolYear(Number(e.target.value))}
+            className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            {schoolYears.map(sy => (
+              <option key={sy.schoolyearid} value={sy.schoolyearid}>{sy.year}</option>
+            ))}
+          </select>
+          <label className="block text-sm font-medium text-gray-700">Chọn tuần:</label>
+          <select
+            value={selectedWeek?.start || ''}
+            onChange={e => {
+              const week = weeks.find(w => w.start === e.target.value);
+              setSelectedWeek(week || null);
+            }}
+            className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            disabled={!weeks.length}
+          >
+            {weeks.map(week => (
+              <option key={week.start} value={week.start}>{week.label}</option>
+            ))}
+          </select>
+        </div>
+        {/* Filter lớp và loại đánh giá */}
         <div className="mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Lớp:</label>
@@ -233,7 +423,7 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="all">Tất cả các lớp</option>
-              {classesWithEvaluations.map(cls => (
+              {classOptions.map(cls => (
                 <option key={cls.id} value={cls.id}>{cls.name}</option>
               ))}
             </select>
@@ -250,15 +440,6 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
               <option value="negative">Tiêu cực</option>
             </select>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Ngày:</label>
-            <input
-              type="date"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
         </div>
 
         {loading ? (
@@ -268,7 +449,7 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
           </div>
         ) : error ? (
           <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-600">{error}</div>
-        ) : filteredAndSortedEvaluations.length === 0 ? (
+        ) : paginatedEvaluations.length === 0 ? (
           <div className="text-gray-500">Không có đánh giá nào phù hợp với bộ lọc.</div>
         ) : (
           <>
@@ -300,31 +481,44 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {paginatedEvaluations.map((ev, idx) => {
-                    const sec = getSectionInfo(ev.periodid);
+                    const period = ev.period || {};
+                    const className = period.class?.classname || `Lớp ${period.classid || '-'}`;
+                    const subjectName = period.subject?.subjectname || `Môn ${period.subjectid || '-'}`;
+                    const periodNo = period.periodno || '-';
+                    const periodDate = period.perioddate ? new Date(period.perioddate).toLocaleDateString('vi-VN') : '-';
                     return (
                       <tr key={ev.evaluationid}>
                         <td className="px-4 py-2 text-sm text-gray-500">{(currentPage - 1) * ITEMS_PER_PAGE + idx + 1}</td>
-                        <td className="px-4 py-2 text-sm text-gray-900">{sec ? sec.periodno : '-'}</td>
-                        <td className="px-4 py-2 text-sm text-gray-900">{sec ? new Date(sec.perioddate).toLocaleDateString('vi-VN') : '-'}</td>
-                        <td className="px-4 py-2 text-sm text-gray-900">{sec ? getClassName(sec.classid) : '-'}</td>
+                        <td className="px-4 py-2 text-sm text-gray-900">{periodNo}</td>
+                        <td className="px-4 py-2 text-sm text-gray-900">{periodDate}</td>
+                        <td className="px-4 py-2 text-sm text-gray-900">
+                          {(() => {
+                            const cid = ev.period?.classid;
+                            let clsName = ev.period?.class?.classname;
+                            if (!clsName && allClasses.length > 0 && cid) {
+                              const found = allClasses.find(c => c.classid === cid);
+                              clsName = found ? found.classname : `Lớp ${cid || '-'}`;
+                            }
+                            return clsName || `Lớp ${cid || '-'}`;
+                          })()}
+                        </td>
                         <td className="px-4 py-2 text-sm text-gray-900 max-w-xs whitespace-pre-line break-words">{ev.content}</td>
                         <td className="px-4 py-2 text-sm">
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                            getEvaluationType(ev) === 'negative' 
-                              ? 'bg-red-100 text-red-800' 
-                              : 'bg-green-100 text-green-800'
-                          }`}>
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getEvaluationType(ev) === 'negative' ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
                             {getEvaluationType(ev) === 'negative' ? 'Tiêu cực' : 'Tích cực'}
                           </span>
                         </td>
                         <td className="px-4 py-2 text-sm text-gray-900">{getDateTime(ev.createdat)}</td>
                         <td className="px-4 py-2 text-sm text-gray-900">
-                          <button 
-                            className="px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
-                            onClick={() => handleShowStudents(ev)}
-                          >
-                            Xem {getStudentPreview(ev)} 
-                          </button>
+                          {ev.students && ev.students.length > 0 ? (
+                            <button className="px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600" onClick={() => handleShowStudents(ev)}>
+                              {ev.students.length === classStudentCounts[ev.period?.classid]
+                                ? 'Xem cả lớp'
+                                : `Xem ${ev.students.length} học sinh`}
+                            </button>
+                          ) : (
+                            <span className="text-gray-400">Không có</span>
+                          )}
                         </td>
                       </tr>
                     );
@@ -334,12 +528,12 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
             </div>
             <div className="flex justify-between items-center mt-6">
               <div className="text-sm text-gray-500">
-                Hiển thị {paginatedEvaluations.length} / {filteredAndSortedEvaluations.length} đánh giá
+                Hiển thị {totalCount} / {totalCount} đánh giá
               </div>
               <div className="flex items-center gap-2">
                 <button
                   className="px-3 py-1 rounded border bg-gray-100 hover:bg-gray-200"
-                  onClick={() => setCurrentPage(currentPage - 1)}
+                  onClick={() => handlePageChange(currentPage - 1)}
                   disabled={currentPage === 1}
                 >
                   &lt;
@@ -348,14 +542,14 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
                   <button
                     key={i}
                     className={`px-3 py-1 rounded border ${currentPage === i + 1 ? 'bg-blue-500 text-white' : 'bg-gray-100 hover:bg-gray-200'}`}
-                    onClick={() => setCurrentPage(i + 1)}
+                    onClick={() => handlePageChange(i + 1)}
                   >
                     {i + 1}
                   </button>
                 ))}
                 <button
                   className="px-3 py-1 rounded border bg-gray-100 hover:bg-gray-200"
-                  onClick={() => setCurrentPage(currentPage + 1)}
+                  onClick={() => handlePageChange(currentPage + 1)}
                   disabled={currentPage === totalPages}
                 >
                   &gt;

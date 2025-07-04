@@ -2,6 +2,15 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import API_URL from '../../config/api';
 import { FaArrowLeft, FaCalendarAlt, FaFileAlt } from 'react-icons/fa';
+import { toast } from 'react-hot-toast';
+
+const ITEMS_PER_PAGE = 15;
+
+// Helper lấy token từ localStorage
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('token');
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
 
 const ReportGroupDetail = ({ user }) => {
   const { reportGroupId } = useParams();
@@ -10,22 +19,45 @@ const ReportGroupDetail = ({ user }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [studentReports, setStudentReports] = useState([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [editTitle, setEditTitle] = useState('');
+  const [editContent, setEditContent] = useState('');
+  const [editReportStudents, setEditReportStudents] = useState([]);
+  const [saving, setSaving] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
 
   useEffect(() => {
     const fetchGroupDetail = async () => {
       setLoading(true);
       setError('');
       try {
-        // Lấy danh sách report student trong group này
-        const res = await fetch(`${API_URL}/api/report-students/report-group/${reportGroupId}?page=1&pageSize=10`);
+        const res = await fetch(`${API_URL}/api/report-students/report-group/${reportGroupId}?page=${currentPage}&pageSize=${ITEMS_PER_PAGE}`, {
+          headers: { ...getAuthHeaders() }
+        });
         if (!res.ok) throw new Error('Không tìm thấy báo cáo');
         const data = await res.json();
-        if (data.length > 0) {
-          setGroup(data[0].reportgroup || null);
-          setStudentReports(data);
+        if (data.items && data.items.length > 0) {
+          setGroup(data.items[0].reportgroup || null);
+          setStudentReports(data.items);
+          setTotalCount(data.totalCount || 0);
+          setTotalPages(data.totalPages || 1);
+          setEditTitle(data.items[0].reportgroup?.title || '');
+          setEditContent(data.items[0].reportgroup?.content || '');
+          setEditReportStudents(data.items.map(item => ({
+            reportStudentId: item.reportstudentid,
+            studentId: item.student?.studentid || item.studentid,
+            content: item.content
+          })));
         } else {
           setGroup(null);
           setStudentReports([]);
+          setTotalCount(0);
+          setTotalPages(1);
+          setEditTitle('');
+          setEditContent('');
+          setEditReportStudents([]);
         }
       } catch (err) {
         setError(err.message || 'Lỗi không xác định');
@@ -34,7 +66,7 @@ const ReportGroupDetail = ({ user }) => {
       }
     };
     if (reportGroupId) fetchGroupDetail();
-  }, [reportGroupId]);
+  }, [reportGroupId, currentPage]);
 
   const formatDate = (dateStr) => {
     if (!dateStr) return '';
@@ -54,6 +86,44 @@ const ReportGroupDetail = ({ user }) => {
     if (!text) return '';
     return text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
   }
+
+  const handlePageChange = (page) => {
+    if (page >= 1 && page <= totalPages) setCurrentPage(page);
+  };
+
+  const handleSave = async (sendEmail = false) => {
+    setSaving(true);
+    try {
+      const body = {
+        reportGroupId: group.reportgroupid,
+        teacherId: group.teacherid,
+        title: editTitle,
+        content: editContent,
+        reportStudents: editReportStudents.map(rs => ({
+          reportStudentId: rs.reportStudentId,
+          studentId: rs.studentId,
+          content: rs.content
+        }))
+      };
+      const url = sendEmail
+        ? `${API_URL}/api/report-groups/update-with-students-and-email`
+        : `${API_URL}/api/report-groups/update-with-students`;
+      const res = await fetch(url, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify(body)
+      });
+      if (!res.ok) throw new Error('Lưu báo cáo thất bại');
+      toast.success(sendEmail ? 'Đã gửi báo cáo cho phụ huynh!' : 'Đã lưu nháp báo cáo!');
+      // Reload lại dữ liệu báo cáo nếu cần
+      // Gợi ý: gọi lại API lấy chi tiết report group
+      // ...
+    } catch (e) {
+      toast.error(e.message || 'Lỗi khi lưu/gửi báo cáo');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -92,9 +162,40 @@ const ReportGroupDetail = ({ user }) => {
     <div className="flex-1 p-6 w-full">
       <button className="mb-4 px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 flex items-center gap-2" onClick={() => navigate(-1)}><FaArrowLeft /> Quay lại</button>
       <div className="bg-white rounded-lg shadow-lg p-6 w-full">
-        <h2 className="text-2xl font-semibold mb-2 flex items-center gap-2"><FaFileAlt className="text-blue-500" /> <span dangerouslySetInnerHTML={{__html: boldMarkdown(group.title)}}></span></h2>
+        <div className="flex items-center gap-2 mb-2">
+          <h2 className="text-2xl font-semibold flex items-center">
+            <FaFileAlt className="text-blue-500 mr-2" />
+            {isEditing ? (
+              <input
+                className="border rounded p-3 font-bold text-2xl w-full mb-2"
+                value={editTitle}
+                onChange={e => setEditTitle(e.target.value)}
+                style={{ minHeight: '48px' }}
+              />
+            ) : (
+              <span dangerouslySetInnerHTML={{__html: boldMarkdown(group.title)}}></span>
+            )}
+          </h2>
+          {!isEditing && (
+            <button className="ml-2 text-gray-500 hover:text-blue-600" onClick={() => setIsEditing(true)} title="Sửa báo cáo">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 112.828 2.828L11.828 15.828a4 4 0 01-1.414.828l-4.243 1.414 1.414-4.243a4 4 0 01.828-1.414z" /></svg>
+            </button>
+          )}
+        </div>
         <div className="mb-2 text-gray-600 flex items-center gap-2"><FaCalendarAlt /> {formatDate(group.startdate)} - {formatDate(group.enddate)}</div>
-        <div className="mb-4 text-gray-700 whitespace-pre-line border rounded p-4 bg-gray-50" dangerouslySetInnerHTML={{__html: boldMarkdown(group.content)}}></div>
+        <div className="mb-4">
+          {isEditing ? (
+            <textarea
+              className="w-full border rounded p-4 font-medium text-lg min-h-[180px] mb-4"
+              value={editContent}
+              onChange={e => setEditContent(e.target.value)}
+              rows={8}
+              style={{ minHeight: '180px' }}
+            />
+          ) : (
+            <div className="text-gray-700 whitespace-pre-line border rounded p-4 bg-gray-50" dangerouslySetInnerHTML={{__html: boldMarkdown(group.content)}}></div>
+          )}
+        </div>
         <div className="mb-4">
           <span className={`px-2 py-1 rounded-full text-xs font-semibold 
             ${group.status && group.status.toLowerCase() === 'hoàn thành' ? 'bg-green-100 text-green-700 border border-green-300' : ''}
@@ -116,9 +217,25 @@ const ReportGroupDetail = ({ user }) => {
             <tbody className="bg-white divide-y divide-gray-200">
               {studentReports.map((r, idx) => (
                 <tr key={r.reportstudentid}>
-                  <td className="px-4 py-2">{idx + 1}</td>
+                  <td className="px-4 py-2">{(currentPage - 1) * ITEMS_PER_PAGE + idx + 1}</td>
                   <td className="px-4 py-2">{r.student?.name || r.studentid}</td>
-                  <td className="px-4 py-2 text-sm whitespace-pre-line max-w-2xl break-words" dangerouslySetInnerHTML={{__html: boldMarkdown(r.content)}}></td>
+                  <td className="px-4 py-2 text-sm whitespace-pre-line max-w-2xl break-words">
+                    {isEditing ? (
+                      <textarea
+                        className="w-full border rounded p-3 font-medium text-base min-h-[120px]"
+                        value={editReportStudents[idx]?.content || ''}
+                        onChange={e => {
+                          const newArr = [...editReportStudents];
+                          newArr[idx].content = e.target.value;
+                          setEditReportStudents(newArr);
+                        }}
+                        rows={5}
+                        style={{ minHeight: '120px' }}
+                      />
+                    ) : (
+                      <div dangerouslySetInnerHTML={{__html: boldMarkdown(r.content)}}></div>
+                    )}
+                  </td>
                   <td className="px-4 py-2">
                     <span className={`px-2 py-1 rounded-full text-xs font-semibold 
                       ${r.status && r.status.toLowerCase() === 'hoàn thành' ? 'bg-green-100 text-green-700 border border-green-300' : ''}
@@ -130,6 +247,17 @@ const ReportGroupDetail = ({ user }) => {
               ))}
             </tbody>
           </table>
+        </div>
+        <div className="flex gap-2 mt-4">
+          {isEditing ? (
+            <>
+              <button onClick={() => setIsEditing(false)} className="px-4 py-2 bg-gray-200 rounded">Hủy</button>
+              <button onClick={() => handleSave(false)} disabled={saving} className="px-4 py-2 bg-gray-300 rounded">Lưu nháp</button>
+              <button onClick={() => handleSave(true)} disabled={saving} className="px-4 py-2 bg-blue-600 text-white rounded">Gửi phụ huynh</button>
+            </>
+          ) : (
+            <button onClick={() => handleSave(true)} disabled={saving} className="px-4 py-2 bg-blue-600 text-white rounded">Gửi phụ huynh</button>
+          )}
         </div>
       </div>
     </div>

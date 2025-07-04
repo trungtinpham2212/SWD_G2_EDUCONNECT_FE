@@ -56,6 +56,12 @@ const StudentsIcon = (props) => (
   </svg>
 );
 
+// Helper lấy token từ localStorage
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('token');
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
+
 const SessionDetail = () => {
   const { sessionid } = useParams();
   const [sessionInfo, setSessionInfo] = useState(null);
@@ -78,46 +84,43 @@ const SessionDetail = () => {
     const fetchSessionAndStudents = async () => {
       try {
         setLoading(true);
-        const sessionRes = await fetch(`${API_URL}/api/periods/${sessionid}`);
-        if (!sessionRes.ok) throw new Error('Không thể tải dữ liệu buổi học');
+        // Lấy thông tin tiết học theo periodid
+        const sessionRes = await fetch(`${API_URL}/api/periods/${sessionid}`, { headers: { ...getAuthHeaders() } });
+        if (!sessionRes.ok) throw new Error('Không thể tải dữ liệu tiết học');
         const sessionData = await sessionRes.json();
         setSessionInfo(sessionData);
-
-        const classRes = await fetch(`${API_URL}/api/classes?page=1&pageSize=10`);
+        // Lấy thông tin lớp
+        const classRes = await fetch(`${API_URL}/api/classes/${sessionData.classid}`, { headers: { ...getAuthHeaders() } });
         if (!classRes.ok) throw new Error('Không thể tải dữ liệu lớp');
         const classData = await classRes.json();
-        const foundClass = classData.find(cls => cls.classid === sessionData.classid);
-        setClassInfo(foundClass || null);
-        if (!foundClass) {
-          setError('Không tìm thấy thông tin lớp học.');
-          setLoading(false);
-          return;
-        }
-
-        const studentRes = await fetch(`${API_URL}/api/students?page=1&pageSize=10`);
+        setClassInfo(classData);
+        // Lấy danh sách học sinh trong lớp
+        const studentRes = await fetch(`${API_URL}/api/students/by-class/${classData.classid}`, { headers: { ...getAuthHeaders() } });
         const studentData = await studentRes.json();
-        const filteredStudents = studentData.filter(stu => stu.classid === foundClass.classid);
-        setStudents(filteredStudents);
-
-        const parentRes = await fetch(`${API_URL}/api/user-accounts`);
+        setStudents(studentData.items || studentData || []);
+        // Lấy danh sách phụ huynh
+        const parentRes = await fetch(`${API_URL}/api/user-accounts`, { headers: { ...getAuthHeaders() } });
         const parentData = await parentRes.json();
         setParentAccounts(parentData);
-
-        const teacherRes = await fetch(`${API_URL}/api/teachers?page=1&pageSize=10`);
-        const teacherData = await teacherRes.json();
-        const teacher = teacherData.find(t => t.teacherid === foundClass.teacherhomeroomid);
+        // Lấy tên giáo viên chủ nhiệm
         let name = 'Không rõ';
-        if (teacher?.userid) {
-          const userRes = await fetch(`${API_URL}/api/user-accounts/${teacher.userid}`);
-          if (userRes.ok) {
-            const userData = await userRes.json();
-            name = userData.fullname || 'Không rõ';
+        if (classData.teacherhomeroomid) {
+          const teacherRes = await fetch(`${API_URL}/api/teachers/${classData.teacherhomeroomid}`, { headers: { ...getAuthHeaders() } });
+          if (teacherRes.ok) {
+            const teacher = await teacherRes.json();
+            if (teacher.userid) {
+              const userRes = await fetch(`${API_URL}/api/user-accounts/${teacher.userid}`, { headers: { ...getAuthHeaders() } });
+              if (userRes.ok) {
+                const userData = await userRes.json();
+                name = userData.fullname || 'Không rõ';
+              }
+            }
           }
         }
         setTeacherName(name);
-
+        setError(null);
       } catch (err) {
-        setError('Không thể tải dữ liệu. Vui lòng thử lại.');
+        setError('Không thể tải dữ liệu tiết học. Vui lòng thử lại sau.');
       } finally {
         setLoading(false);
       }
@@ -130,7 +133,7 @@ const SessionDetail = () => {
   useEffect(() => {
     const fetchActivities = async () => {
       try {
-        const res = await fetch(`${API_URL}/api/activities`);
+        const res = await fetch(`${API_URL}/api/activities`, { ...getAuthHeaders() });
         const data = await res.json();
         setActivities(data);
       } catch (err) {
@@ -176,7 +179,7 @@ const SessionDetail = () => {
 
       const response = await fetch(`${API_URL}/api/evaluations`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
         body: JSON.stringify(evaluationData)
       });
       
@@ -256,10 +259,12 @@ const SessionDetail = () => {
               <div className="text-center py-10 text-gray-500">Không có học sinh nào trong lớp này.</div>
             ) : (
               <div className="overflow-x-auto">
+                <h3 className="text-xl font-regular text-gray-800">Tích vào ô vuông để đánh giá</h3>
                 <table className="min-w-full">
                   <thead className="bg-gray-100">
                     <tr>
                       <th className="px-6 py-3 text-center w-12">
+                        
                         <input
                           type="checkbox"
                           checked={students.length > 0 && selectedStudents.length === students.length}
