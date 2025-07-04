@@ -25,7 +25,7 @@ const ParentDashboard = ({ user, active, setActive, isSidebarOpen, setSidebarOpe
     }
   }, [loggedInUser]);
 
-  // Nếu là phụ huynh, gọi API để lấy thông tin chi tiết (bao gồm cả parentId)
+  // Nếu là phụ huynh, gọi API để lấy thông tin chi tiết (bao gồm cả students)
   useEffect(() => {
     if (loggedInUser && loggedInUser.roleId === 3 && loggedInUser.userId) {
       const fetchParentDetails = async () => {
@@ -36,8 +36,14 @@ const ParentDashboard = ({ user, active, setActive, isSidebarOpen, setSidebarOpe
             throw new Error('Không thể tải thông tin phụ huynh');
           }
           const data = await res.json();
-          // Gán parentId bằng userId vì API user account không trả về parentId trực tiếp
-          setParentDetails({ ...data, parentId: data.userid });
+          setParentDetails(data);
+          // Nếu có students, setChildren luôn
+          if (Array.isArray(data.students) && data.students.length > 0) {
+            setChildren(data.students);
+            setSelectedChildId(data.students[0].studentId);
+          } else {
+            setChildren([]);
+          }
         } catch (err) {
           console.error('Error fetching parent details:', err);
           setError(err.message);
@@ -49,80 +55,42 @@ const ParentDashboard = ({ user, active, setActive, isSidebarOpen, setSidebarOpe
     }
   }, [loggedInUser]);
 
-  // Lấy danh sách con sử dụng API mới
-  useEffect(() => {
-    if (!parentDetails || !parentDetails.parentId) return;
-    
-    const fetchChildren = async () => {
-      try {
-        setLoading(true);
-        console.log('Đang lấy danh sách học sinh cho phụ huynh:', parentDetails.parentId);
-        
-        const res = await fetch(`${API_URL}/api/students/parent/${parentDetails.parentId}?page=1&pageSize=10`);
-        if (!res.ok) {
-          throw new Error('Không thể kết nối với server');
-        }
-        const myChildren = await res.json();
-        
-        console.log('Số con của phụ huynh:', myChildren.length);
-        console.log('Danh sách con:', myChildren);
-
-        if (myChildren.length > 0) {
-          setChildren(myChildren);
-          setSelectedChildId(myChildren[0].studentid);
-        } else {
-          console.log('No children found or invalid data format');
-        }
-      } catch (err) {
-        console.error('Error fetching children:', err);
-        setError('Không thể tải danh sách con');
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchChildren();
-  }, [parentDetails]);
-
   // Lấy periods, subjects, classes khi có selectedChildId
   useEffect(() => {
     if (!selectedChildId || !loggedInUser || loggedInUser.roleId !== 3) return;
-    
+
     const fetchData = async () => {
       try {
         setLoading(true);
-        console.log('Fetching schedule data for child:', selectedChildId);
-        
         // Lấy thông tin học sinh được chọn
-        const selectedStudent = children.find(c => c.studentid === selectedChildId);
+        const selectedStudent = children.find(c => c.studentId === selectedChildId);
         if (!selectedStudent) {
           throw new Error('Không tìm thấy thông tin học sinh');
         }
-
-        // Lấy tất cả dữ liệu cần thiết
-        const [periodRes, subjectRes, classRes] = await Promise.all([
-          fetch(`${API_URL}/api/periods`),
-          fetch(`${API_URL}/api/subjects?page=1&pageSize=10`),
-          fetch(`${API_URL}/api/classes?page=1&pageSize=10`)
+        // Lấy tất cả periods (gộp nhiều trang)
+        let allPeriods = [];
+        let page = 1;
+        let totalPages = 1;
+        do {
+          const periodRes = await fetch(`${API_URL}/api/periods?page=${page}&pageSize=50`);
+          if (!periodRes.ok) throw new Error('Không thể tải periods');
+          const periodsRaw = await periodRes.json();
+          const items = Array.isArray(periodsRaw.items) ? periodsRaw.items : [];
+          allPeriods = allPeriods.concat(items);
+          totalPages = periodsRaw.totalPages || 1;
+          page++;
+        } while (page <= totalPages);
+        // Lấy subjects và classes (1 trang là đủ)
+        const [subjectRes, classRes] = await Promise.all([
+          fetch(`${API_URL}/api/subjects?page=1&pageSize=100`),
+          fetch(`${API_URL}/api/classes?page=1&pageSize=100`)
         ]);
-
-        if (!periodRes.ok || !subjectRes.ok || !classRes.ok) {
-          throw new Error('Một số API không phản hồi');
-        }
-
-        const [periodsRaw, subjectsData, classesData] = await Promise.all([
-          periodRes.json(),
-          subjectRes.json(),
-          classRes.json()
-        ]);
-        const periodsData = Array.isArray(periodsRaw.items) ? periodsRaw.items : [];
-
-        console.log('Tổng số tiết học đã tải:', periodsData.length);
-        console.log('Số môn học:', subjectsData.length);
-        console.log('Số lớp:', classesData.length);
-
-        setPeriods(periodsData);
-        setSubjects(subjectsData);
-        setClasses(classesData);
+        if (!subjectRes.ok || !classRes.ok) throw new Error('Không thể tải subjects/classes');
+        const subjectsData = await subjectRes.json();
+        const classesData = await classRes.json();
+        setPeriods(allPeriods);
+        setSubjects(Array.isArray(subjectsData.items) ? subjectsData.items : []);
+        setClasses(Array.isArray(classesData.items) ? classesData.items : []);
       } catch (err) {
         console.error('Error fetching schedule data:', err);
         setError('Không thể tải dữ liệu thời khóa biểu');
@@ -139,9 +107,9 @@ const ParentDashboard = ({ user, active, setActive, isSidebarOpen, setSidebarOpe
     return subject ? subject.subjectname : `Môn ${subjectid}`;
   };
   
-  const getClassName = (classid) => {
-    const cls = classes.find(c => c.classid === classid);
-    return cls ? cls.classname : `Lớp ${classid}`;
+  const getClassName = (classId) => {
+    const child = children.find(c => c.class && c.class.classId === classId);
+    return child && child.class ? child.class.className : `Lớp ${classId}`;
   };
 
   // Helper tuần
@@ -188,16 +156,21 @@ const ParentDashboard = ({ user, active, setActive, isSidebarOpen, setSidebarOpe
   ];
 
   // Lấy periods của lớp con đang chọn trong tuần hiện tại
-  const selectedChild = children.find(c => c.studentid === selectedChildId);
+  const selectedChild = children.find(c => c.studentId === selectedChildId);
   let classPeriods = [];
   if (selectedChild) {
     const { start, end } = getWeekDates(currentWeek);
     const startStr = formatDate(start);
     const endStr = formatDate(end);
+    // Lấy đúng classId để so sánh
+    const childClassId = selectedChild.class?.classId || selectedChild.classId;
     classPeriods = periods.filter(p => {
       const dateStr = p.perioddate.split('T')[0];
-      return p.classid === selectedChild.classid && dateStr >= startStr && dateStr <= endStr;
+      // So sánh classid với classId của học sinh
+      return Number(p.classid) === Number(childClassId) && dateStr >= startStr && dateStr <= endStr;
     });
+    // Debug log
+    console.log('Lịch học lọc được:', classPeriods);
   }
 
   // Render schedule grid
@@ -228,7 +201,13 @@ const ParentDashboard = ({ user, active, setActive, isSidebarOpen, setSidebarOpe
                     {getSubjectName(period.subjectid)}
                   </div>
                   <div className="text-xs text-gray-600">
-                    {getClassName(period.classid)}
+                    {(() => {
+                      const childClassId = selectedChild.class?.classId || selectedChild.classId;
+                      if (Number(period.classid) === Number(childClassId)) {
+                        return selectedChild.class?.className || selectedChild.className || `Lớp ${childClassId}`;
+                      }
+                      return getClassName(period.classid);
+                    })()}
                   </div>
                 </div>
               )}
@@ -286,8 +265,8 @@ const ParentDashboard = ({ user, active, setActive, isSidebarOpen, setSidebarOpe
               onChange={e => setSelectedChildId(Number(e.target.value))}
             >
               {children.map(child => (
-                <option key={child.studentid} value={child.studentid}>
-                  {child.name} - {getClassName(child.classid)}
+                <option key={child.studentId} value={child.studentId}>
+                  {child.name} - {child.class?.className || getClassName(child.classId)}
                 </option>
               ))}
             </select>
