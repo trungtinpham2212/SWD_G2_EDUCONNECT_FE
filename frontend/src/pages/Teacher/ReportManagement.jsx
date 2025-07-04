@@ -82,7 +82,7 @@ const ReportManagement = ({ user }) => {
 
   const getStatusDisplay = (status) => {
     if (!status) return 'Đang tạo...';
-    if (status.toLowerCase() === 'hoàn thành') return 'Đã gửi';
+    if (status.toLowerCase() === 'hoàn thành' || status.toLowerCase() === 'sent') return 'Đã gửi';
     if (status.toLowerCase() === 'draft') return 'Nháp';
     return status;
   };
@@ -250,7 +250,7 @@ const ReportManagement = ({ user }) => {
                     <FaCalendarAlt /> {formatDate(group.startdate)} - {formatDate(group.enddate)}
                   </div>
                   <div className="flex items-center gap-2 text-sm min-h-[32px]">
-                    <span className={`px-2 py-1 rounded-full text-xs font-semibold ${group.status === 'Hoàn thành' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>{getStatusDisplay(group.status)}</span>
+                    <span className={`px-2 py-1 rounded-full text-xs font-semibold ${['Hoàn thành', 'Sent', 'sent'].includes(group.status) ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>{getStatusDisplay(group.status)}</span>
                   </div>
                   <div className="flex gap-2 mt-auto">
                     <button

@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import API_URL from '../../config/api';
 import { FaArrowLeft, FaCalendarAlt, FaFileAlt } from 'react-icons/fa';
-import { toast } from 'react-hot-toast';
+import { toast, ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
 const ITEMS_PER_PAGE = 15;
 
@@ -11,6 +12,12 @@ const getAuthHeaders = () => {
   const token = localStorage.getItem('token');
   return token ? { Authorization: `Bearer ${token}` } : {};
 };
+
+const BackIcon = (props) => (
+  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+  </svg>
+);
 
 const ReportGroupDetail = ({ user }) => {
   const { reportGroupId } = useParams();
@@ -27,44 +34,56 @@ const ReportGroupDetail = ({ user }) => {
   const [editReportStudents, setEditReportStudents] = useState([]);
   const [saving, setSaving] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [originalTitle, setOriginalTitle] = useState('');
+  const [originalContent, setOriginalContent] = useState('');
+  const [originalReportStudents, setOriginalReportStudents] = useState([]);
+
+  const fetchGroupDetail = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const res = await fetch(`${API_URL}/api/report-students/report-group/${reportGroupId}?page=${currentPage}&pageSize=${ITEMS_PER_PAGE}`, {
+        headers: { ...getAuthHeaders() }
+      });
+      if (!res.ok) throw new Error('Không tìm thấy báo cáo');
+      const data = await res.json();
+      if (data.items && data.items.length > 0) {
+        setGroup(data.items[0].reportgroup || null);
+        setStudentReports(data.items);
+        setTotalCount(data.totalCount || 0);
+        setTotalPages(data.totalPages || 1);
+        setEditTitle(data.items[0].reportgroup?.title || '');
+        setEditContent(data.items[0].reportgroup?.content || '');
+        const reportStudentsArr = data.items.map(item => ({
+          reportStudentId: item.reportstudentid,
+          studentId: item.student?.studentid || item.studentid,
+          content: item.content
+        }));
+        setEditReportStudents(reportStudentsArr);
+        // Lưu giá trị gốc để so sánh thay đổi
+        setOriginalTitle(data.items[0].reportgroup?.title || '');
+        setOriginalContent(data.items[0].reportgroup?.content || '');
+        setOriginalReportStudents(reportStudentsArr);
+      } else {
+        setGroup(null);
+        setStudentReports([]);
+        setTotalCount(0);
+        setTotalPages(1);
+        setEditTitle('');
+        setEditContent('');
+        setEditReportStudents([]);
+        setOriginalTitle('');
+        setOriginalContent('');
+        setOriginalReportStudents([]);
+      }
+    } catch (err) {
+      setError(err.message || 'Lỗi không xác định');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchGroupDetail = async () => {
-      setLoading(true);
-      setError('');
-      try {
-        const res = await fetch(`${API_URL}/api/report-students/report-group/${reportGroupId}?page=${currentPage}&pageSize=${ITEMS_PER_PAGE}`, {
-          headers: { ...getAuthHeaders() }
-        });
-        if (!res.ok) throw new Error('Không tìm thấy báo cáo');
-        const data = await res.json();
-        if (data.items && data.items.length > 0) {
-          setGroup(data.items[0].reportgroup || null);
-          setStudentReports(data.items);
-          setTotalCount(data.totalCount || 0);
-          setTotalPages(data.totalPages || 1);
-          setEditTitle(data.items[0].reportgroup?.title || '');
-          setEditContent(data.items[0].reportgroup?.content || '');
-          setEditReportStudents(data.items.map(item => ({
-            reportStudentId: item.reportstudentid,
-            studentId: item.student?.studentid || item.studentid,
-            content: item.content
-          })));
-        } else {
-          setGroup(null);
-          setStudentReports([]);
-          setTotalCount(0);
-          setTotalPages(1);
-          setEditTitle('');
-          setEditContent('');
-          setEditReportStudents([]);
-        }
-      } catch (err) {
-        setError(err.message || 'Lỗi không xác định');
-      } finally {
-        setLoading(false);
-      }
-    };
     if (reportGroupId) fetchGroupDetail();
   }, [reportGroupId, currentPage]);
 
@@ -76,7 +95,7 @@ const ReportGroupDetail = ({ user }) => {
 
   const getStatusDisplay = (status) => {
     if (!status) return 'Đang tạo...';
-    if (status.toLowerCase() === 'hoàn thành') return 'Đã gửi';
+    if (status.toLowerCase() === 'hoàn thành' || status.toLowerCase() === 'sent') return 'Đã gửi';
     if (status.toLowerCase() === 'draft') return 'Nháp';
     return status;
   };
@@ -106,23 +125,40 @@ const ReportGroupDetail = ({ user }) => {
         }))
       };
       const url = sendEmail
-        ? `${API_URL}/api/report-groups/update-with-students-and-email`
-        : `${API_URL}/api/report-groups/update-with-students`;
+        ? `${API_URL}/api/report-groups/${group.reportgroupid}/send-mail-with-students`
+        : `${API_URL}/api/report-groups/${group.reportgroupid}/update-with-students`;
+      const method = sendEmail ? 'POST' : 'PUT';
       const res = await fetch(url, {
-        method: 'PUT',
+        method,
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify(body)
       });
-      if (!res.ok) throw new Error('Lưu báo cáo thất bại');
+      if (!res.ok) throw new Error(sendEmail ? 'Gửi báo cáo thất bại' : 'Lưu báo cáo thất bại');
+      // Cập nhật lại giá trị gốc để disable nút lưu
+      setOriginalTitle(editTitle);
+      setOriginalContent(editContent);
+      setOriginalReportStudents(editReportStudents.map(rs => ({ ...rs })));
+      // Hiển thị toast thành công TRƯỚC khi reload data
       toast.success(sendEmail ? 'Đã gửi báo cáo cho phụ huynh!' : 'Đã lưu nháp báo cáo!');
-      // Reload lại dữ liệu báo cáo nếu cần
-      // Gợi ý: gọi lại API lấy chi tiết report group
-      // ...
+      setIsEditing(false);
+      // Reload lại dữ liệu báo cáo để cập nhật trạng thái
+      if (reportGroupId) await fetchGroupDetail();
     } catch (e) {
       toast.error(e.message || 'Lỗi khi lưu/gửi báo cáo');
     } finally {
       setSaving(false);
     }
+  };
+
+  // So sánh thay đổi
+  const isChanged = () => {
+    if (editTitle !== originalTitle) return true;
+    if (editContent !== originalContent) return true;
+    if (editReportStudents.length !== originalReportStudents.length) return true;
+    for (let i = 0; i < editReportStudents.length; i++) {
+      if (editReportStudents[i].content !== (originalReportStudents[i]?.content || '')) return true;
+    }
+    return false;
   };
 
   if (loading) {
@@ -160,7 +196,15 @@ const ReportGroupDetail = ({ user }) => {
   }
   return (
     <div className="flex-1 p-6 w-full">
-      <button className="mb-4 px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 flex items-center gap-2" onClick={() => navigate(-1)}><FaArrowLeft /> Quay lại</button>
+      <div className="mb-6">
+        <button
+          className="flex items-center gap-2 text-sm font-semibold text-gray-600 hover:text-gray-900 transition-colors"
+          onClick={() => navigate(-1)}
+        >
+          <BackIcon />
+          Quay lại
+        </button>
+      </div>
       <div className="bg-white rounded-lg shadow-lg p-6 w-full">
         <div className="flex items-center gap-2 mb-2">
           <h2 className="text-2xl font-semibold flex items-center">
@@ -198,7 +242,7 @@ const ReportGroupDetail = ({ user }) => {
         </div>
         <div className="mb-4">
           <span className={`px-2 py-1 rounded-full text-xs font-semibold 
-            ${group.status && group.status.toLowerCase() === 'hoàn thành' ? 'bg-green-100 text-green-700 border border-green-300' : ''}
+            ${group.status && (group.status.toLowerCase() === 'hoàn thành' || group.status.toLowerCase() === 'sent') ? 'bg-green-100 text-green-700 border border-green-300' : ''}
             ${group.status && group.status.toLowerCase() === 'draft' ? 'bg-yellow-100 text-yellow-700 border border-yellow-300' : ''}
           `}>{getStatusDisplay(group.status)}</span>
         </div>
@@ -225,8 +269,9 @@ const ReportGroupDetail = ({ user }) => {
                         className="w-full border rounded p-3 font-medium text-base min-h-[120px]"
                         value={editReportStudents[idx]?.content || ''}
                         onChange={e => {
-                          const newArr = [...editReportStudents];
-                          newArr[idx].content = e.target.value;
+                          const newArr = editReportStudents.map((item, i) =>
+                            i === idx ? { ...item, content: e.target.value } : { ...item }
+                          );
                           setEditReportStudents(newArr);
                         }}
                         rows={5}
@@ -238,9 +283,11 @@ const ReportGroupDetail = ({ user }) => {
                   </td>
                   <td className="px-4 py-2">
                     <span className={`px-2 py-1 rounded-full text-xs font-semibold 
-                      ${r.status && r.status.toLowerCase() === 'hoàn thành' ? 'bg-green-100 text-green-700 border border-green-300' : ''}
+                      ${r.status && (r.status.toLowerCase() === 'hoàn thành' || r.status.toLowerCase() === 'sent') ? 'bg-green-100 text-green-700 border border-green-300' : ''}
                       ${r.status && r.status.toLowerCase() === 'draft' ? 'bg-yellow-100 text-yellow-700 border border-yellow-300' : ''}
-                    `}>{getStatusDisplay(r.status)}</span>
+                    `}>
+                      {getStatusDisplay(r.status)}
+                    </span>
                   </td>
                   <td className="px-4 py-2 text-xs text-gray-500">{formatDate(r.updateat)}</td>
                 </tr>
@@ -251,15 +298,38 @@ const ReportGroupDetail = ({ user }) => {
         <div className="flex gap-2 mt-4">
           {isEditing ? (
             <>
-              <button onClick={() => setIsEditing(false)} className="px-4 py-2 bg-gray-200 rounded">Hủy</button>
-              <button onClick={() => handleSave(false)} disabled={saving} className="px-4 py-2 bg-gray-300 rounded">Lưu nháp</button>
-              <button onClick={() => handleSave(true)} disabled={saving} className="px-4 py-2 bg-blue-600 text-white rounded">Gửi phụ huynh</button>
+              <button onClick={() => setIsEditing(false)} className="px-4 py-2 bg-gray-200 rounded" disabled={saving}>Hủy</button>
+              <button
+                onClick={() => handleSave(false)}
+                disabled={!isChanged() || saving}
+                className={`px-4 py-2 bg-gray-300 rounded ${(!isChanged() || saving) ? 'opacity-60 cursor-not-allowed' : ''}`}
+              >
+                {saving ? 'Đang tải...' : 'Lưu nháp'}
+              </button>
+              {group.status && ['hoàn thành', 'sent'].includes(group.status.toLowerCase()) ? null : (
+                <button
+                  onClick={() => handleSave(true)}
+                  disabled={!isChanged() || saving}
+                  className={`px-4 py-2 bg-blue-600 text-white rounded ${(!isChanged() || saving) ? 'opacity-60 cursor-not-allowed' : ''}`}
+                >
+                  {saving ? 'Đang tải...' : 'Gửi phụ huynh'}
+                </button>
+              )}
             </>
           ) : (
-            <button onClick={() => handleSave(true)} disabled={saving} className="px-4 py-2 bg-blue-600 text-white rounded">Gửi phụ huynh</button>
+            group.status && ['hoàn thành', 'sent'].includes(group.status.toLowerCase()) ? null : (
+              <button
+                onClick={() => handleSave(true)}
+                disabled={saving}
+                className={`px-4 py-2 bg-blue-600 text-white rounded ${saving ? 'opacity-60 cursor-not-allowed' : ''}`}
+              >
+                {saving ? 'Đang tải...' : 'Gửi phụ huynh'}
+              </button>
+            )
           )}
         </div>
       </div>
+      <ToastContainer />
     </div>
   );
 };
