@@ -27,26 +27,33 @@ const ClassManagement = ({ user, active, setActive, isSidebarOpen, setSidebarOpe
   const [creating, setCreating] = useState(false);
   const [updating, setUpdating] = useState(false);
 
+  // Helper lấy token từ localStorage
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem('token');
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
+
   const fetchData = async () => {
     try {
       setLoading(true);
       const [classRes, teacherRes, userRes, yearRes, studentRes] = await Promise.all([
-        fetch(`${API_URL}/api/classes`),
-        fetch(`${API_URL}/api/teachers`),
-        fetch(`${API_URL}/api/user-accounts`),
-        fetch(`${API_URL}/api/school-years`),
-        fetch(`${API_URL}/api/students`)
+        fetch(`${API_URL}/api/classes?page=1&pageSize=10`, { headers: getAuthHeaders() }),
+        fetch(`${API_URL}/api/teachers?page=1&pageSize=10`, { headers: getAuthHeaders() }),
+        fetch(`${API_URL}/api/user-accounts`, { headers: getAuthHeaders() }),
+        fetch(`${API_URL}/api/school-years`, { headers: getAuthHeaders() }),
+        fetch(`${API_URL}/api/students?page=1&pageSize=400`, { headers: getAuthHeaders() })
+        // 1 trang 10 lớp, mỗi lớp 40 học sinh
       ]);
-      const classData = await classRes.json();
-      const teacherData = await teacherRes.json();
+      const classDataRaw = await classRes.json();
+      const teacherDataRaw = await teacherRes.json();
       const userData = await userRes.json();
       const yearData = await yearRes.json();
-      const studentData = await studentRes.json();
-      setClasses(classData);
-      setTeachers(teacherData);
+      const studentDataRaw = await studentRes.json();
+      setClasses(Array.isArray(classDataRaw.items) ? classDataRaw.items : []);
+      setTeachers(Array.isArray(teacherDataRaw.items) ? teacherDataRaw.items : []);
       setUserAccounts(userData);
       setSchoolYears(yearData);
-      setStudents(studentData);
+      setStudents(Array.isArray(studentDataRaw.items) ? studentDataRaw.items : []);
       setError(null);
     } catch (err) {
       setError('Không thể tải dữ liệu lớp học. Vui lòng thử lại sau.');
@@ -59,8 +66,10 @@ const ClassManagement = ({ user, active, setActive, isSidebarOpen, setSidebarOpe
     fetchData();
   }, []);
 
-  const getTeacherName = (teacherid) => {
-    const teacher = teachers.find(t => t.teacherid === teacherid);
+  // Lấy tên giáo viên chủ nhiệm từ teacherhomeroomid
+  const getHomeroomTeacherName = (teacherhomeroomid) => {
+    if (!teacherhomeroomid) return '-';
+    const teacher = teachers.find(t => t.teacherid === teacherhomeroomid);
     if (!teacher) return '-';
     const user = userAccounts.find(u => u.userid === teacher.userid);
     return user ? user.fullname : '-';
@@ -72,7 +81,7 @@ const ClassManagement = ({ user, active, setActive, isSidebarOpen, setSidebarOpe
   };
 
   const getStudentsOfClass = (classid) => {
-    return students.filter(stu => stu.classid === classid);
+    return (Array.isArray(students) ? students : []).filter(stu => stu.classid === classid);
   };
 
   const handleShowStudents = (classid, classname) => {
@@ -88,7 +97,7 @@ const ClassManagement = ({ user, active, setActive, isSidebarOpen, setSidebarOpe
       .filter(c => c.schoolyearid === Number(schoolyearid))
       .map(c => c.teacherhomeroomid);
     // Lọc ra các giáo viên chưa được phân công
-    return teachers.filter(t => !assignedTeachers.includes(t.teacherid));
+    return (Array.isArray(teachers) ? teachers : []).filter(t => !assignedTeachers.includes(t.teacherid));
   };
 
   const isClassNameExists = (classname, schoolyearid, excludeClassId = null) => {
@@ -117,14 +126,14 @@ const ClassManagement = ({ user, active, setActive, isSidebarOpen, setSidebarOpe
     }
     setCreating(true);
     try {
+      const formData = new FormData();
+      formData.append('classname', form.classname);
+      formData.append('teacherhomeroomid', form.teacherhomeroomid);
+      formData.append('schoolyearid', form.schoolyearid);
       const res = await fetch(`${API_URL}/api/Class`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          classname: form.classname,
-          teacherhomeroomid: form.teacherhomeroomid,
-          schoolyearid: form.schoolyearid
-        })
+        headers: { ...getAuthHeaders() },
+        body: formData
       });
       if (!res.ok) throw new Error('Tạo lớp thất bại');
       setShowCreateModal(false);
@@ -146,15 +155,15 @@ const ClassManagement = ({ user, active, setActive, isSidebarOpen, setSidebarOpe
     }
     setUpdating(true);
     try {
+      const formData = new FormData();
+      formData.append('classid', editingClass.classid);
+      formData.append('classname', form.classname);
+      formData.append('teacherhomeroomid', form.teacherhomeroomid);
+      formData.append('schoolyearid', form.schoolyearid);
       const res = await fetch(`${API_URL}/api/Class/${editingClass.classid}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          classid: editingClass.classid,
-          classname: form.classname,
-          teacherhomeroomid: form.teacherhomeroomid,
-          schoolyearid: form.schoolyearid
-        })
+        headers: { ...getAuthHeaders() },
+        body: formData
       });
       if (!res.ok) throw new Error('Cập nhật lớp thất bại');
       setShowEditModal(false);
@@ -172,7 +181,8 @@ const ClassManagement = ({ user, active, setActive, isSidebarOpen, setSidebarOpe
   const handleDeleteClass = async () => {
     try {
       const res = await fetch(`${API_URL}/api/Class/${classToDelete}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: getAuthHeaders()
       });
       if (!res.ok) throw new Error('Xóa lớp thất bại');
       setShowDeleteModal(false);
@@ -227,7 +237,7 @@ const ClassManagement = ({ user, active, setActive, isSidebarOpen, setSidebarOpe
                   </tr>
                 ) : (
                   classes.map((cls, idx) => {
-                    const homeroomTeacher = getTeacherName(cls.teacherhomeroomid);
+                    const homeroomTeacher = getHomeroomTeacherName(cls.teacherhomeroomid);
                     const year = getSchoolYear(cls.schoolyearid);
                     const classStudents = getStudentsOfClass(cls.classid);
                     return (

@@ -31,33 +31,42 @@ const TeacherManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
   const [userToDelete, setUserToDelete] = useState(null);
   const [activeTab, setActiveTab] = useState('user');
 
+  // Helper lấy token từ localStorage
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem('token');
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
+
   const fetchData = async () => {
     try {
       setLoading(true);
       const [userRes, teacherRes, subjectRes, classRes, yearRes, sectionRes, evaluationRes] = await Promise.all([
-        fetch(`${API_URL}/api/user-accounts`),
-        fetch(`${API_URL}/api/teachers`),
-        fetch(`${API_URL}/api/subjects`),
-        fetch(`${API_URL}/api/classes`),
-        fetch(`${API_URL}/api/school-years`),
-        fetch(`${API_URL}/api/periods`)
+        fetch(`${API_URL}/api/user-accounts`, { headers: getAuthHeaders() }),
+        fetch(`${API_URL}/api/teachers?page=1&pageSize=15`, { headers: getAuthHeaders() }),
+        fetch(`${API_URL}/api/subjects?page=1&pageSize=15`, { headers: getAuthHeaders() }),
+        fetch(`${API_URL}/api/classes?page=1&pageSize=15`, { headers: getAuthHeaders() }),
+        fetch(`${API_URL}/api/school-years`, { headers: getAuthHeaders() }),
+        fetch(`${API_URL}/api/periods?page=1&pageSize=15`, { headers: getAuthHeaders() }),
         // fetch(`${API_URL}/api/evaluations`)
       ]);
       const userData = await userRes.json();
-      const teacherData = await teacherRes.json();
-      const subjectData = await subjectRes.json();
-      const classData = await classRes.json();
-      const yearData = await yearRes.json();
-      const sectionData = await sectionRes.json();
+      const teacherDataRaw = await teacherRes.json();
+      const subjectDataRaw = await subjectRes.json();
+      const classDataRaw = await classRes.json();
+      const sectionDataRaw = await sectionRes.json();
       // const evaluationData = await evaluationRes.json();
 
       setUserAccounts(userData.filter(u => u.roleid === 2));
+      const teacherData = Array.isArray(teacherDataRaw.items) ? teacherDataRaw.items : [];
+      const subjectData = Array.isArray(subjectDataRaw.items) ? subjectDataRaw.items : [];
+      const classData = Array.isArray(classDataRaw.items) ? classDataRaw.items : [];
+      const sectionData = Array.isArray(sectionDataRaw.items) ? sectionDataRaw.items : [];
+      const yearData = await yearRes.json();
+      setSchoolYears(yearData);
+      setSections(sectionData);
       setTeachers(teacherData);
       setSubjects(subjectData);
       setClasses(classData);
-      setSchoolYears(yearData);
-      setSections(sectionData);
-      // setEvaluations(evaluationData);
       setError(null);
     } catch (error) {
       console.error(error);
@@ -71,8 +80,9 @@ const TeacherManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
     fetchData();
   }, []);
 
-  const getSubjectName = (subjectid) => {
-    const subject = subjects.find(s => String(s.subjectid) === String(subjectid));
+  const getSubjectName = (teacher) => {
+    if (!teacher || !teacher.subjectid) return '-';
+    const subject = subjects.find(s => s.subjectid === teacher.subjectid);
     return subject ? subject.subjectname : '-';
   };
 
@@ -127,33 +137,21 @@ const TeacherManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
     try {
       if (activeTab === 'user') {
         if (editingUser) {
-          // Chỉ gửi password nếu có nhập
-          const updateData = {
-            userId: editingUser.userid.toString(), // Chuyển thành string theo yêu cầu API
-            fullname: form.fullname.trim(),
-            email: form.email.trim(),
-            phoneNumber: form.phonenumber.trim(),
-            address: form.address.trim(),
-            roleId: 2 // Thêm roleId theo yêu cầu API
-          };
-
-          // Luôn gửi password - nếu không nhập mới thì gửi password hiện tại
-          if (form.password.trim()) {
-            updateData.password = form.password.trim();
-          } else {
-            // Nếu không nhập password mới, gửi password hiện tại (có thể cần lấy từ user data)
-            updateData.password = editingUser.password || ''; // Hoặc để trống nếu không có
-          }
-
+          // Sửa giáo viên
+          const formData = new FormData();
+          formData.append('Password', form.password);
+          formData.append('Fullname', form.fullname);
+          formData.append('Email', form.email);
+          formData.append('PhoneNumber', form.phonenumber);
+          formData.append('Address', form.address);
+          formData.append('RoleId', 2);
           const response = await fetch(`${API_URL}/api/user-accounts/${editingUser.userid}`, {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(updateData)
+            headers: { ...getAuthHeaders() },
+            body: formData
           });
-
           const text = await response.text();
           const normalized = text.replace(/"/g, '').trim();
-
           if (response.ok || normalized.toLowerCase().includes('success') || normalized.includes('Update successful')) {
             await fetchData();
             setShowModal(false);
@@ -162,48 +160,58 @@ const TeacherManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
             toast.error('Lỗi khi cập nhật: ' + normalized);
           }
         } else {
-          // Sử dụng API mới hỗ trợ subjectId khi tạo giáo viên
-            const response = await fetch(`${API_URL}/auth/register`, {
+          // Tạo giáo viên mới: GỬI DẠNG JSON, truyền đủ subjectId
+          setIsSubmitting(true);
+          try {
+            const response = await fetch(`${API_URL}/api/user-accounts/register`, {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
               body: JSON.stringify({
-                username: form.username.trim(),
-                password: form.password.trim(),
-                fullname: form.fullname.trim(),
-                email: form.email.trim(),
-              phoneNumber: form.phonenumber.trim(), // Đổi tên field theo API
-                address: form.address.trim(),
-              roleId: 2, // Đổi tên field theo API
-              subjectId: form.subjectid ? Number(form.subjectid) : 0 // Thêm subjectId
+                username: form.username,
+                password: form.password,
+                fullname: form.fullname,
+                email: form.email,
+                phoneNumber: form.phonenumber,
+                address: form.address,
+                roleId: 2,
+                subjectId: form.subjectid ? Number(form.subjectid) : 0
               })
             });
-          
-            const textRes = await response.text();
-            const normalized = textRes.replace(/"/g, '').trim();
-          
-          if (response.ok && (normalized.toLowerCase().includes('success') || normalized.toLowerCase().includes('registration successful'))) {
-                  await fetchData();
-                  setShowModal(false);
-                  toast.success('Tạo giáo viên thành công!');
-                } else {
-            toast.error('Lỗi khi tạo giáo viên: ' + normalized);
+            let data;
+            const resText = await response.text();
+            try {
+              data = JSON.parse(resText);
+            } catch {
+              data = resText;
+            }
+            if (response.ok && (typeof data === 'object' || (typeof data === 'string' && data.toLowerCase().includes('success')))) {
+              await fetchData();
+              setShowModal(false);
+              toast.success('Tạo giáo viên thành công!');
+            } else {
+              const msg = typeof data === 'string' ? data : (data.message || 'Tạo giáo viên thất bại!');
+              toast.error('Lỗi khi tạo giáo viên: ' + msg);
+            }
+          } catch (err) {
+            toast.error('Lỗi khi tạo giáo viên: ' + (err.message || err));
+          } finally {
+            setIsSubmitting(false);
           }
         }
       } else if (activeTab === 'subject' && editingUser) {
+        // Gán môn học
         const teacher = teachers.find(t => t.userid === editingUser.userid);
         if (teacher && form.subjectid && form.subjectid !== teacher.subjectid) {
+          const formData = new FormData();
+          formData.append('teacherId', teacher.teacherid);
+          formData.append('subjectId', Number(form.subjectid));
           const response = await fetch(`${API_URL}/api/teachers/${teacher.teacherid}`, {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              teacherId: teacher.teacherid,
-              subjectId: Number(form.subjectid)
-            })
+            headers: { ...getAuthHeaders() },
+            body: formData
           });
-
           const responseText = await response.text();
           const normalized = responseText.replace(/"/g, '').trim();
-
           if (response.ok || normalized.toLowerCase().includes('success')) {
             await fetchData();
             setShowModal(false);
@@ -270,7 +278,8 @@ const TeacherManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
 
         // Xóa teacher record trước
         const teacherRes = await fetch(`${API_URL}/api/teachers/${teacher.teacherid}`, {
-          method: 'DELETE'
+          method: 'DELETE',
+          headers: getAuthHeaders()
         });
         
         if (!teacherRes.ok) {
@@ -286,7 +295,8 @@ const TeacherManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
 
       // Xóa user account
       const userRes = await fetch(`${API_URL}/api/user-accounts/${userToDelete.userid}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: getAuthHeaders()
       });
       
       const userResText = await userRes.text();
@@ -351,14 +361,14 @@ const TeacherManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
                   </tr>
                 ) : (
                   userAccounts.map((u, idx) => {
-                    const teacher = teachers.find(t => t.userid === u.userid);
-                    const subjectName = teacher ? getSubjectName(teacher.subjectid) : '-';
+                    const teacher = (Array.isArray(teachers) ? teachers : []).find(t => t.userid === u.userid);
+                    const subjectName = teacher ? getSubjectName(teacher) : '-';
                     const homeroom = teacher ? getHomeroomClass(teacher.teacherid) : null;
                     return (
                       <tr key={u.userid}>
                         <td className="px-4 py-2 text-sm text-gray-500">{idx + 1}</td>
-                        <td className="px-4 py-2 text-sm text-gray-900">{u.fullname}</td>
-                        <td className="px-4 py-2 text-sm text-gray-900">{u.email}</td>
+                        <td className="px-4 py-2 text-sm text-gray-900">{teacher && teacher.user ? teacher.user.fullname : u.fullname}</td>
+                        <td className="px-4 py-2 text-sm text-gray-900">{teacher && teacher.user ? teacher.user.email : u.email}</td>
                         <td className="px-4 py-2 text-sm text-gray-900">{subjectName}</td>
                         <td className="px-4 py-2 text-sm text-gray-900">{homeroom ? homeroom.classname : <span className="text-gray-400">-</span>}</td>
                         <td className="px-4 py-2 text-sm text-gray-900">{homeroom ? homeroom.year : <span className="text-gray-400">-</span>}</td>

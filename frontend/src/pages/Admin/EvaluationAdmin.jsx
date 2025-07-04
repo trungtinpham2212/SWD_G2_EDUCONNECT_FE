@@ -49,6 +49,12 @@ function generateWeeksForSchoolYear(schoolYear) {
   return weeks;
 }
 
+// Helper lấy token từ localStorage
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('token');
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
+
 const EvaluationAdmin = () => {
   const [evaluations, setEvaluations] = useState([]);
   const [sections, setSections] = useState([]);
@@ -68,7 +74,7 @@ const EvaluationAdmin = () => {
   // Thêm state cho filter
   const [selectedClass, setSelectedClass] = useState('all');
   const [selectedTeacher, setSelectedTeacher] = useState('all');
-  const [selectedType, setSelectedType] = useState('all'); // 'all', 'positive', 'negative'
+  const [selectedActivity, setSelectedActivity] = useState('all');
 
   // State năm học và tuần đang chọn
   const [schoolYears, setSchoolYears] = useState([]);
@@ -114,11 +120,28 @@ const EvaluationAdmin = () => {
     });
   }, [evaluations, sections, classes]);
 
+  // Dropdown lớp: lấy từ state classes, không phụ thuộc evaluations
+  const allClassOptions = useMemo(() => {
+    return Array.isArray(classes)
+      ? classes.map(cls => ({ id: cls.classid, name: cls.classname }))
+      : [];
+  }, [classes]);
+
+  // Dropdown giáo viên: lấy từ teachers + userAccounts (fullname), không phụ thuộc evaluations
+  const allTeacherOptions = useMemo(() => {
+    return Array.isArray(teachers)
+      ? teachers.map(t => {
+          const user = Array.isArray(userAccounts) ? userAccounts.find(u => u.userid === t.userid) : null;
+          return { id: t.teacherid, name: user ? user.fullname : `Giáo viên ${t.teacherid}` };
+        })
+      : [];
+  }, [teachers, userAccounts]);
+
   // Fetch school years on mount
   useEffect(() => {
     const fetchSchoolYears = async () => {
       try {
-        const res = await fetch(`${API_URL}/api/school-years`);
+        const res = await fetch(`${API_URL}/api/school-years`, { headers: getAuthHeaders() });
         const data = await res.json();
         setSchoolYears(data);
         // Mặc định chọn năm học chứa ngày 2/12/2024
@@ -155,90 +178,339 @@ const EvaluationAdmin = () => {
     setSelectedWeek(foundWeek || null);
   }, [selectedSchoolYear, schoolYears]);
 
-  // Fetch evaluations theo tuần
+  // Fetch evaluations theo tuần và trang
+  const [totalCount, setTotalCount] = useState(0);
+  const [pageSize, setPageSize] = useState(ITEMS_PER_PAGE);
+  const [totalPages, setTotalPages] = useState(1);
+  const [allEvaluations, setAllEvaluations] = useState([]);
+  const [isFetchingAll, setIsFetchingAll] = useState(false);
+
   useEffect(() => {
-    if (!selectedWeek) return;
     const fetchData = async () => {
       try {
         setLoading(true);
         setError(null);
-        const headers = {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        };
-        // Lấy evaluations theo tuần
-        const evalRes = await fetch(`${API_URL}/api/evaluations/by-date-range?startDate=${selectedWeek.start}&endDate=${selectedWeek.end}`, { headers });
-        let evalData = [];
+        // Trường hợp có lọc loại đánh giá (selectedActivity !== 'all') hoặc lọc đồng thời lớp+giáo viên
+        if (selectedActivity !== 'all' || (selectedClass !== 'all' && selectedTeacher !== 'all')) {
+          setIsFetchingAll(true);
+          let all = [];
+          let totalPages = 1;
+          // Ưu tiên lấy theo lớp nếu có
+          if (selectedClass !== 'all') {
+            const firstRes = await fetch(`${API_URL}/api/evaluations/by-class-and-date-range/${selectedClass}?startDate=${selectedWeek.start}&endDate=${selectedWeek.end}&page=1&pageSize=${pageSize}`, { headers: getAuthHeaders() });
+            const firstData = await firstRes.json();
+            totalPages = firstData.totalPages || 1;
+            all = Array.isArray(firstData.items) ? firstData.items : [];
+            const fetches = [];
+            for (let i = 2; i <= totalPages; i++) {
+              fetches.push(fetch(`${API_URL}/api/evaluations/by-class-and-date-range/${selectedClass}?startDate=${selectedWeek.start}&endDate=${selectedWeek.end}&page=${i}&pageSize=${pageSize}`, { headers: getAuthHeaders() }));
+            }
+            const results = await Promise.all(fetches);
+            for (const res of results) {
+              const data = await res.json();
+              if (Array.isArray(data.items)) all = all.concat(data.items);
+            }
+          } else if (selectedTeacher !== 'all') {
+            const firstRes = await fetch(`${API_URL}/api/evaluations/by-teacher/${selectedTeacher}?page=1&pageSize=${pageSize}`, { headers: getAuthHeaders() });
+            const firstData = await firstRes.json();
+            totalPages = firstData.totalPages || 1;
+            all = Array.isArray(firstData.items) ? firstData.items : [];
+            const fetches = [];
+            for (let i = 2; i <= totalPages; i++) {
+              fetches.push(fetch(`${API_URL}/api/evaluations/by-teacher/${selectedTeacher}?page=${i}&pageSize=${pageSize}`, { headers: getAuthHeaders() }));
+            }
+            const results = await Promise.all(fetches);
+            for (const res of results) {
+              const data = await res.json();
+              if (Array.isArray(data.items)) all = all.concat(data.items);
+            }
+          } else {
+            // Không chọn lớp/giáo viên, lấy toàn bộ evaluations tuần
+            const firstRes = await fetch(`${API_URL}/api/evaluations/by-date-range?startDate=${selectedWeek.start}&endDate=${selectedWeek.end}&page=1&pageSize=${pageSize}`, { headers: getAuthHeaders() });
+            const firstData = await firstRes.json();
+            totalPages = firstData.totalPages || 1;
+            all = Array.isArray(firstData.items) ? firstData.items : [];
+            const fetches = [];
+            for (let i = 2; i <= totalPages; i++) {
+              fetches.push(fetch(`${API_URL}/api/evaluations/by-date-range?startDate=${selectedWeek.start}&endDate=${selectedWeek.end}&page=${i}&pageSize=${pageSize}`, { headers: getAuthHeaders() }));
+            }
+            const results = await Promise.all(fetches);
+            for (const res of results) {
+              const data = await res.json();
+              if (Array.isArray(data.items)) all = all.concat(data.items);
+            }
+          }
+          setAllEvaluations(all);
+          setIsFetchingAll(false);
+        } else if (selectedClass !== 'all') {
+          // Chỉ lọc lớp (không loại, không giáo viên), phân trang backend
+          let evalRes = await fetch(`${API_URL}/api/evaluations/by-class-and-date-range/${selectedClass}?startDate=${selectedWeek.start}&endDate=${selectedWeek.end}&page=${currentPage}&pageSize=${pageSize}`, { headers: getAuthHeaders() });
+        let evalDataRaw = [];
+          let totalCountRaw = 0;
+          let totalPagesRaw = 1;
+          let pageSizeRaw = pageSize;
         let noData = false;
         if (evalRes.ok) {
           let json;
           try {
             json = await evalRes.json();
           } catch {
-            // Nếu không parse được json, thử lấy text
             const text = await evalRes.text();
             if (typeof text === 'string' && text.toLowerCase().includes('no evaluations found')) {
-              evalData = [];
+              evalDataRaw = [];
               noData = true;
             } else {
-              evalData = [];
+              evalDataRaw = [];
             }
             json = null;
           }
           if (json) {
-            if (Array.isArray(json)) {
-              evalData = json;
+            if (Array.isArray(json.items)) {
+              evalDataRaw = json.items;
+                totalCountRaw = json.totalCount || 0;
+                totalPagesRaw = json.totalPages || 1;
+                pageSizeRaw = json.pageSize || pageSize;
             } else if (typeof json === 'object' && json.message && json.message.toLowerCase().includes('no evaluations found')) {
-              evalData = [];
+              evalDataRaw = [];
               noData = true;
             } else {
-              evalData = [];
+              evalDataRaw = [];
             }
           }
         } else {
-          // Nếu status 404 hoặc 200 nhưng trả về text "No evaluations found ..."
+            const text = await evalRes.text();
+            if (typeof text === 'string' && text.toLowerCase().includes('no evaluations found')) {
+              evalDataRaw = [];
+              noData = true;
+            } else {
+              throw new Error('Một hoặc nhiều API call thất bại');
+            }
+          }
+          // Fetch các dữ liệu khác
+          const [sectionRes, classRes, teacherRes, userRes, studentRes, activityRes] = await Promise.all([
+            fetch(`${API_URL}/api/periods?page=1&pageSize=100`, { headers: getAuthHeaders() }),
+            fetch(`${API_URL}/api/classes?page=1&pageSize=100`, { headers: getAuthHeaders() }),
+            fetch(`${API_URL}/api/teachers?page=1&pageSize=100`, { headers: getAuthHeaders() }),
+            fetch(`${API_URL}/api/user-accounts`, { headers: getAuthHeaders() }),
+            fetch(`${API_URL}/api/students?page=1&pageSize=200`, { headers: getAuthHeaders() }),
+            fetch(`${API_URL}/api/activities`, { headers: getAuthHeaders() })
+          ]);
+          if (!sectionRes.ok || !classRes.ok || !teacherRes.ok || !userRes.ok || !studentRes.ok || !activityRes.ok) {
+            throw new Error('Một hoặc nhiều API call thất bại');
+          }
+          const [sectionsRaw, classesRaw, teachersRaw, users, studentsRaw, activitiesRaw] = await Promise.all([
+            sectionRes.json(),
+            classRes.json(),
+            teacherRes.json(),
+            userRes.json(),
+            studentRes.json(),
+            activityRes.json()
+          ]);
+          setEvaluations(Array.isArray(evalDataRaw) ? evalDataRaw : []);
+          setSections(Array.isArray(sectionsRaw.items) ? sectionsRaw.items : []);
+          setClasses(Array.isArray(classesRaw.items) ? classesRaw.items : []);
+          setTeachers(Array.isArray(teachersRaw.items) ? teachersRaw.items : []);
+          setUserAccounts(Array.isArray(users) ? users : []);
+          setStudents(Array.isArray(studentsRaw.items) ? studentsRaw.items : []);
+          setActivities(Array.isArray(activitiesRaw) ? activitiesRaw : (Array.isArray(activitiesRaw.items) ? activitiesRaw.items : []));
+          setTotalCount(totalCountRaw);
+          setTotalPages(totalPagesRaw);
+          setPageSize(pageSizeRaw);
+          if (noData) setError('nodata');
+          else setError(null);
+          setAllEvaluations([]); // reset allEvaluations khi không filter
+        } else if (selectedTeacher !== 'all') {
+          // Chỉ lọc giáo viên (không loại, không lớp), phân trang backend
+          let evalRes = await fetch(`${API_URL}/api/evaluations/by-teacher/${selectedTeacher}?page=${currentPage}&pageSize=${pageSize}`, { headers: getAuthHeaders() });
+          let evalDataRaw = [];
+          let totalCountRaw = 0;
+          let totalPagesRaw = 1;
+          let pageSizeRaw = pageSize;
+          let noData = false;
+          if (evalRes.ok) {
+            let json;
+            try {
+              json = await evalRes.json();
+            } catch {
+              const text = await evalRes.text();
+              if (typeof text === 'string' && text.toLowerCase().includes('no evaluations found')) {
+                evalDataRaw = [];
+                noData = true;
+              } else {
+                evalDataRaw = [];
+              }
+              json = null;
+            }
+            if (json) {
+              if (Array.isArray(json.items)) {
+                evalDataRaw = json.items;
+                totalCountRaw = json.totalCount || 0;
+                totalPagesRaw = json.totalPages || 1;
+                pageSizeRaw = json.pageSize || pageSize;
+              } else if (typeof json === 'object' && json.message && json.message.toLowerCase().includes('no evaluations found')) {
+                evalDataRaw = [];
+                noData = true;
+              } else {
+                evalDataRaw = [];
+              }
+            }
+          } else {
+            const text = await evalRes.text();
+            if (typeof text === 'string' && text.toLowerCase().includes('no evaluations found')) {
+              evalDataRaw = [];
+              noData = true;
+            } else {
+              throw new Error('Một hoặc nhiều API call thất bại');
+            }
+          }
+          // Fetch các dữ liệu khác
+          const [sectionRes, classRes, teacherRes, userRes, studentRes, activityRes] = await Promise.all([
+            fetch(`${API_URL}/api/periods?page=1&pageSize=100`, { headers: getAuthHeaders() }),
+            fetch(`${API_URL}/api/classes?page=1&pageSize=100`, { headers: getAuthHeaders() }),
+            fetch(`${API_URL}/api/teachers?page=1&pageSize=100`, { headers: getAuthHeaders() }),
+            fetch(`${API_URL}/api/user-accounts`, { headers: getAuthHeaders() }),
+            fetch(`${API_URL}/api/students?page=1&pageSize=200`, { headers: getAuthHeaders() }),
+            fetch(`${API_URL}/api/activities`, { headers: getAuthHeaders() })
+          ]);
+          if (!sectionRes.ok || !classRes.ok || !teacherRes.ok || !userRes.ok || !studentRes.ok || !activityRes.ok) {
+            throw new Error('Một hoặc nhiều API call thất bại');
+          }
+          const [sectionsRaw, classesRaw, teachersRaw, users, studentsRaw, activitiesRaw] = await Promise.all([
+            sectionRes.json(),
+            classRes.json(),
+            teacherRes.json(),
+            userRes.json(),
+            studentRes.json(),
+            activityRes.json()
+          ]);
+          setEvaluations(Array.isArray(evalDataRaw) ? evalDataRaw : []);
+          setSections(Array.isArray(sectionsRaw.items) ? sectionsRaw.items : []);
+          setClasses(Array.isArray(classesRaw.items) ? classesRaw.items : []);
+          setTeachers(Array.isArray(teachersRaw.items) ? teachersRaw.items : []);
+          setUserAccounts(Array.isArray(users) ? users : []);
+          setStudents(Array.isArray(studentsRaw.items) ? studentsRaw.items : []);
+          setActivities(Array.isArray(activitiesRaw) ? activitiesRaw : (Array.isArray(activitiesRaw.items) ? activitiesRaw.items : []));
+          setTotalCount(totalCountRaw);
+          setTotalPages(totalPagesRaw);
+          setPageSize(pageSizeRaw);
+          if (noData) setError('nodata');
+          else setError(null);
+          setAllEvaluations([]); // reset allEvaluations khi không filter
+        } else {
+          // Không lọc gì, phân trang backend
+          let evalRes = await fetch(`${API_URL}/api/evaluations/by-date-range?startDate=${selectedWeek.start}&endDate=${selectedWeek.end}&page=${currentPage}&pageSize=${pageSize}`, { headers: getAuthHeaders() });
+          let evalDataRaw = [];
+          let totalCountRaw = 0;
+          let totalPagesRaw = 1;
+          let pageSizeRaw = pageSize;
+          let noData = false;
+          if (evalRes.ok) {
+            let json;
+            try {
+              json = await evalRes.json();
+            } catch {
+              const text = await evalRes.text();
+              if (typeof text === 'string' && text.toLowerCase().includes('no evaluations found')) {
+                evalDataRaw = [];
+                noData = true;
+              } else {
+                evalDataRaw = [];
+              }
+              json = null;
+            }
+            if (json) {
+              if (Array.isArray(json.items)) {
+                evalDataRaw = json.items;
+                totalCountRaw = json.totalCount || 0;
+                totalPagesRaw = json.totalPages || 1;
+                pageSizeRaw = json.pageSize || pageSize;
+              } else if (typeof json === 'object' && json.message && json.message.toLowerCase().includes('no evaluations found')) {
+                evalDataRaw = [];
+                noData = true;
+              } else {
+                evalDataRaw = [];
+              }
+            }
+          } else {
           const text = await evalRes.text();
           if (typeof text === 'string' && text.toLowerCase().includes('no evaluations found')) {
-            evalData = [];
+            evalDataRaw = [];
             noData = true;
           } else {
             throw new Error('Một hoặc nhiều API call thất bại');
           }
         }
-        const [sectionRes, classRes, teacherRes, userRes, activityRes] = await Promise.all([
-          fetch(`${API_URL}/api/periods`, { headers }),
-          fetch(`${API_URL}/api/classes`, { headers }),
-          fetch(`${API_URL}/api/teachers`, { headers }),
-          fetch(`${API_URL}/api/user-accounts`, { headers }),
-          fetch(`${API_URL}/api/activities`, { headers })
+          // Fetch các dữ liệu khác
+        const [sectionRes, classRes, teacherRes, userRes, studentRes, activityRes] = await Promise.all([
+            fetch(`${API_URL}/api/periods?page=1&pageSize=100`, { headers: getAuthHeaders() }),
+            fetch(`${API_URL}/api/classes?page=1&pageSize=100`, { headers: getAuthHeaders() }),
+            fetch(`${API_URL}/api/teachers?page=1&pageSize=100`, { headers: getAuthHeaders() }),
+          fetch(`${API_URL}/api/user-accounts`, { headers: getAuthHeaders() }),
+            fetch(`${API_URL}/api/students?page=1&pageSize=200`, { headers: getAuthHeaders() }),
+          fetch(`${API_URL}/api/activities`, { headers: getAuthHeaders() })
         ]);
-        if (!sectionRes.ok || !classRes.ok || !teacherRes.ok || !userRes.ok || !activityRes.ok) {
+        if (!sectionRes.ok || !classRes.ok || !teacherRes.ok || !userRes.ok || !studentRes.ok || !activityRes.ok) {
           throw new Error('Một hoặc nhiều API call thất bại');
         }
-        const [sections, classes, teachers, users, activities] = await Promise.all([
+        const [sectionsRaw, classesRaw, teachersRaw, users, studentsRaw, activitiesRaw] = await Promise.all([
           sectionRes.json(),
           classRes.json(),
           teacherRes.json(),
           userRes.json(),
+          studentRes.json(),
           activityRes.json()
         ]);
-        setSections(sections);
-        setClasses(classes);
-        setTeachers(teachers);
-        setUserAccounts(users);
-        setEvaluations(evalData);
-        setActivities(activities);
+        setEvaluations(Array.isArray(evalDataRaw) ? evalDataRaw : []);
+        setSections(Array.isArray(sectionsRaw.items) ? sectionsRaw.items : []);
+        setClasses(Array.isArray(classesRaw.items) ? classesRaw.items : []);
+        setTeachers(Array.isArray(teachersRaw.items) ? teachersRaw.items : []);
+        setUserAccounts(Array.isArray(users) ? users : []);
+        setStudents(Array.isArray(studentsRaw.items) ? studentsRaw.items : []);
+          setActivities(Array.isArray(activitiesRaw) ? activitiesRaw : (Array.isArray(activitiesRaw.items) ? activitiesRaw.items : []));
+          setTotalCount(totalCountRaw);
+          setTotalPages(totalPagesRaw);
+          setPageSize(pageSizeRaw);
         if (noData) setError('nodata');
         else setError(null);
+          setAllEvaluations([]); // reset allEvaluations khi không filter
+        }
       } catch (err) {
         setEvaluations([]);
+        setAllEvaluations([]);
         setError('Không thể tải dữ liệu đánh giá. Vui lòng thử lại sau.');
+        setIsFetchingAll(false);
       } finally {
         setLoading(false);
       }
     };
     fetchData();
-  }, [selectedWeek]);
+  }, [selectedWeek, currentPage, pageSize, selectedClass, selectedTeacher, selectedActivity]);
+
+  // Khi filter client, lọc theo giáo viên và/hoặc loại đánh giá
+  const filteredEvaluations = (selectedActivity !== 'all' || (selectedClass !== 'all' && selectedTeacher !== 'all'))
+    ? allEvaluations.filter(ev => {
+        let match = true;
+        if (selectedTeacher !== 'all') {
+          const section = sections.find(s => s.periodid === ev.periodid);
+          match = match && section && Number(section.teacherid) === Number(selectedTeacher);
+        }
+        if (selectedActivity !== 'all') {
+          const activity = activities.find(act => act.activityid === ev.activityid);
+          if (!activity) return false;
+          match = match && (selectedActivity === 'negative' ? activity.isnegative : !activity.isnegative);
+        }
+        return match;
+      })
+    : evaluations;
+  const totalFiltered = filteredEvaluations.length;
+  const totalFilteredPages = Math.max(1, Math.ceil(totalFiltered / pageSize));
+  const paginatedEvaluations = (selectedActivity !== 'all' || (selectedClass !== 'all' && selectedTeacher !== 'all'))
+    ? filteredEvaluations.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+    : evaluations;
+  // Khi đổi filter loại đánh giá, reset về trang 1
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedActivity]);
 
   const getSectionInfo = (periodid) => sections.find(sec => Number(sec.periodid) === Number(periodid));
   const getClassName = (classid) => {
@@ -320,11 +592,15 @@ const EvaluationAdmin = () => {
     }
 
     // Lọc theo loại đánh giá dựa trên activity.isnegative
-    if (selectedType !== 'all') {
+    if (selectedActivity === 'positive') {
       filtered = filtered.filter(ev => {
         const activity = activities.find(act => act.activityid === ev.activityid);
-        if (!activity) return false;
-        return selectedType === 'negative' ? activity.isnegative : !activity.isnegative;
+        return activity && !activity.isnegative;
+      });
+    } else if (selectedActivity === 'negative') {
+      filtered = filtered.filter(ev => {
+        const activity = activities.find(act => act.activityid === ev.activityid);
+        return activity && activity.isnegative;
       });
     }
 
@@ -342,25 +618,12 @@ const EvaluationAdmin = () => {
         return dateB - dateA;
       }
     });
-  }, [evaluations, sections, selectedClass, selectedTeacher, selectedType, activities, sortAsc]);
+  }, [evaluations, sections, selectedClass, selectedTeacher, selectedActivity, sortAsc]);
 
   const handleSortDate = () => {
     setSortAsc(!sortAsc);
     setCurrentPage(1); // Reset về trang 1 khi đổi sort
   };
-
-  const totalPages = Math.ceil(filteredAndSortedEvaluations.length / ITEMS_PER_PAGE);
-  const paginatedEvaluations = useMemo(() => {
-    return filteredAndSortedEvaluations.slice(
-      (currentPage - 1) * ITEMS_PER_PAGE,
-      currentPage * ITEMS_PER_PAGE
-    );
-  }, [filteredAndSortedEvaluations, currentPage]);
-
-  // Reset trang khi thay đổi filter
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [selectedClass, selectedTeacher, selectedType]);
 
   // Thêm hàm helper để lấy loại đánh giá
   const getEvaluationType = (evaluation) => {
@@ -416,7 +679,7 @@ const EvaluationAdmin = () => {
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="all">Tất cả các lớp</option>
-              {classesWithEvaluations.map(cls => (
+              {allClassOptions.map(cls => (
                 <option key={cls.id} value={cls.id}>{cls.name}</option>
               ))}
             </select>
@@ -429,7 +692,7 @@ const EvaluationAdmin = () => {
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="all">Tất cả giáo viên</option>
-              {teachersWithEvaluations.map(teacher => (
+              {allTeacherOptions.map(teacher => (
                 <option key={teacher.id} value={teacher.id}>{teacher.name}</option>
               ))}
             </select>
@@ -437,8 +700,8 @@ const EvaluationAdmin = () => {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Loại đánh giá:</label>
             <select
-              value={selectedType}
-              onChange={(e) => setSelectedType(e.target.value)}
+              value={selectedActivity}
+              onChange={(e) => setSelectedActivity(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="all">Tất cả</option>
@@ -455,10 +718,8 @@ const EvaluationAdmin = () => {
           </div>
         ) : (error && error !== 'nodata') ? (
           <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-600">{error}</div>
-        ) : (!loading && (error === 'nodata' || (evaluations.length === 0 && !error))) ? (
-          <div className="text-gray-500">Không có đánh giá trong khoảng thời gian này.</div>
-        ) : filteredAndSortedEvaluations.length === 0 ? (
-          <div className="text-gray-500">Không có đánh giá nào phù hợp với bộ lọc.</div>
+        ) : paginatedEvaluations.length === 0 ? (
+          <div className="text-center py-8 text-gray-500">{isFetchingAll ? 'Đang tải toàn bộ đánh giá...' : 'Không có đánh giá trong khoảng thời gian này.'}</div>
         ) : (
           <>
             <div className="overflow-x-auto">
@@ -487,7 +748,7 @@ const EvaluationAdmin = () => {
                     const sec = getSectionInfo(ev.periodid);
                     return (
                       <tr key={ev.evaluationid}>
-                        <td className="px-4 py-2 text-sm text-gray-500">{(currentPage - 1) * ITEMS_PER_PAGE + idx + 1}</td>
+                        <td className="px-4 py-2 text-sm text-gray-500">{idx + 1}</td>
                         <td className="px-4 py-2 text-sm text-gray-900">{sec ? sec.periodno : '-'}</td>
                         <td className="px-4 py-2 text-sm text-gray-900">{sec ? new Date(sec.perioddate).toLocaleDateString('vi-VN') : '-'}</td>
                         <td className="px-4 py-2 text-sm text-gray-900">{sec ? getClassName(sec.classid) : '-'}</td>
@@ -519,7 +780,7 @@ const EvaluationAdmin = () => {
             </div>
             <div className="flex justify-between items-center mt-6">
               <div className="text-sm text-gray-500">
-                Hiển thị {paginatedEvaluations.length} / {filteredAndSortedEvaluations.length} đánh giá
+                Hiển thị {paginatedEvaluations.length} / {selectedActivity !== 'all' ? totalFiltered : totalCount} đánh giá
               </div>
               <div className="flex items-center gap-2">
                 <button
@@ -529,7 +790,7 @@ const EvaluationAdmin = () => {
                 >
                   &lt;
                 </button>
-                {Array.from({ length: totalPages }, (_, i) => (
+                {Array.from({ length: selectedActivity !== 'all' ? totalFilteredPages : totalPages }, (_, i) => (
                   <button
                     key={i}
                     className={`px-3 py-1 rounded border ${currentPage === i + 1 ? 'bg-blue-500 text-white' : 'bg-gray-100 hover:bg-gray-200'}`}
@@ -541,7 +802,7 @@ const EvaluationAdmin = () => {
                 <button
                   className="px-3 py-1 rounded border bg-gray-100 hover:bg-gray-200"
                   onClick={() => handlePageChange(currentPage + 1)}
-                  disabled={currentPage === totalPages}
+                  disabled={currentPage === (selectedActivity !== 'all' ? totalFilteredPages : totalPages)}
                 >
                   &gt;
                 </button>

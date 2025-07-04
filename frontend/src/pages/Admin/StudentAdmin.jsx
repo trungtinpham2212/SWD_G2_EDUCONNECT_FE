@@ -4,7 +4,7 @@ import API_URL from '../../config/api';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
-const ITEMS_PER_PAGE = 8;
+const ITEMS_PER_PAGE = 7;
 
 const StudentAdmin = () => {
     const [students, setStudents] = useState([]);
@@ -27,20 +27,25 @@ const StudentAdmin = () => {
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [studentToDelete, setStudentToDelete] = useState(null);
 
+    // Helper lấy token từ localStorage
+    const getAuthHeaders = () => {
+        const token = localStorage.getItem('token');
+        return token ? { Authorization: `Bearer ${token}` } : {};
+    };
 
     const fetchData = async () => {
         try {
             setLoading(true);
             const [studentRes, classRes, parentRes] = await Promise.all([
-                fetch(`${API_URL}/api/students`),
-                fetch(`${API_URL}/api/classes`),
-                fetch(`${API_URL}/api/user-accounts`)
+                fetch(`${API_URL}/api/students?page=1&pageSize=100`, { headers: getAuthHeaders() }),
+                fetch(`${API_URL}/api/classes?page=1&pageSize=100`, { headers: getAuthHeaders() }),
+                fetch(`${API_URL}/api/user-accounts`, { headers: getAuthHeaders() })
             ]);
-            const studentData = await studentRes.json();
-            const classData = await classRes.json();
+            const studentDataRaw = await studentRes.json();
+            const classDataRaw = await classRes.json();
             const parentData = await parentRes.json();
-            setStudents(studentData);
-            setClasses(classData);
+            setStudents(Array.isArray(studentDataRaw.items) ? studentDataRaw.items : []);
+            setClasses(Array.isArray(classDataRaw.items) ? classDataRaw.items : []);
             setParentAccounts(parentData);
             setError(null);
         } catch (err) {
@@ -59,20 +64,34 @@ const StudentAdmin = () => {
         return date.toLocaleDateString('vi-VN');
     };
 
-    const getClassName = (classid) => {
-        const cls = classes.find(c => c.classid === classid);
-        return cls ? cls.classname : `Lớp ${classid}`;
+    const getClassName = (student) => {
+        const cls = classes.find(c => c.classid === student.classid);
+        return cls ? cls.classname : `Lớp ${student.classid}`;
     };
 
-    const filteredStudents = students
+    const getParentInfo = (student) => {
+        const parent = parentAccounts.find(p => p.userid === student.parentid);
+        if (parent) {
+            return (
+                <span>
+                    <b>{parent.fullname}</b><br />
+                    Email: {parent.email || 'Không có'}<br />
+                    SDT: {parent.phonenumber || 'Không có'}
+                </span>
+            );
+        }
+        return <span className="text-gray-400">Chưa có thông tin</span>;
+    };
+
+    const filteredStudents = (Array.isArray(students) ? students : [])
         .filter(student =>
             student.name.toLowerCase().includes(searchTerm.toLowerCase()) &&
             (selectedClass === 'all' || student.classid === Number(selectedClass))
         )
         .sort((a, b) => {
             if (sortByClass) {
-                const classA = getClassName(a.classid);
-                const classB = getClassName(b.classid);
+                const classA = getClassName(a);
+                const classB = getClassName(b);
                 if (classA === classB) {
                     // Nếu cùng lớp thì sort theo tên
                     return a.name.localeCompare(b.name, 'vi');
@@ -116,8 +135,14 @@ const StudentAdmin = () => {
                 // Sửa học sinh
                 const response = await fetch(`${API_URL}/api/students/${editingStudent.studentid}`, {
                     method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(form)
+                    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+                    body: JSON.stringify({
+                        studentid: editingStudent.studentid,
+                        name: form.name,
+                        dateofbirth: form.dateofbirth,
+                        classid: form.classid,
+                        parentid: form.parentid
+                    })
                 });
                 if (response.ok) {
                     await fetchData();
@@ -131,8 +156,13 @@ const StudentAdmin = () => {
                 // Tạo mới
                 const response = await fetch(`${API_URL}/api/students`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(form)
+                    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+                    body: JSON.stringify({
+                        name: form.name,
+                        dateofbirth: form.dateofbirth,
+                        classid: form.classid,
+                        parentid: form.parentid
+                    })
                 });
                 if (response.ok) {
                     await fetchData();
@@ -156,7 +186,8 @@ const StudentAdmin = () => {
     const confirmDelete = async () => {
         try {
             const response = await fetch(`${API_URL}/api/students/${studentToDelete}`, {
-                method: 'DELETE'
+                method: 'DELETE',
+                headers: getAuthHeaders()
             });
             if (response.ok) {
                 await fetchData();
@@ -269,24 +300,13 @@ const StudentAdmin = () => {
                                                 </div>
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap">
-                                                <span className="px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">{getClassName(student.classid)}</span>
+                                                <span className="px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">{getClassName(student)}</span>
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap">
                                                 <div className="flex items-center">
                                                     <FaUserFriends className="text-gray-500 mr-2" />
                                                     <span className="text-sm text-gray-900">
-                                                        {(() => {
-                                                            const parent = parentAccounts.find(acc => acc.userid === student.parentid);
-                                                            return parent ? (
-                                                                <span>
-                                                                    <b>{parent.fullname}</b><br />
-                                                                    Email: {parent.email || 'Không có'}<br />
-                                                                    SDT: {parent.phonenumber || 'Không có'}
-                                                                </span>
-                                                            ) : (
-                                                                <span className="text-gray-400">Chưa có thông tin</span>
-                                                            );
-                                                        })()}
+                                                        {getParentInfo(student)}
                                                     </span>
                                                 </div>
                                             </td>

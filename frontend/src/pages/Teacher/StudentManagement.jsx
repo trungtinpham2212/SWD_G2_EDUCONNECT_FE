@@ -14,8 +14,8 @@ const StudentManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
     const fetchData = async () => {
       try {
         setLoading(true);
-        // Fetch all classes
-        const classResponse = await fetch(`${API_URL}/api/classes`);
+        // Fetch all classes (phân trang, mặc định pageSize=10)
+        const classResponse = await fetch(`${API_URL}/api/classes?page=1&pageSize=10`); // TODO: Thay đổi pageSize nếu cần
         if (!classResponse.ok) {
           throw new Error('Failed to fetch classes data');
         }
@@ -24,8 +24,8 @@ const StudentManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
         const foundClass = classData.find(cls => cls.teacherhomeroomid === user.teacherId);
         setHomeroomClass(foundClass || null);
         if (foundClass) {
-          // Fetch all students
-          const studentResponse = await fetch(`${API_URL}/api/students`);
+          // Fetch all students (phân trang, mặc định pageSize=10)
+          const studentResponse = await fetch(`${API_URL}/api/students?page=1&pageSize=10`); // TODO: Thay đổi pageSize nếu cần
           if (!studentResponse.ok) {
             throw new Error('Failed to fetch students data');
           }

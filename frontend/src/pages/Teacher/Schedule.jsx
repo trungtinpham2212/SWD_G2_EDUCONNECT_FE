@@ -93,8 +93,8 @@ const Schedule = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) =>
     const fetchSubjectsAndClasses = async () => {
       try {
         const [subjectRes, classRes] = await Promise.all([
-          fetch(`${API_URL}/api/subjects`),
-          fetch(`${API_URL}/api/classes`)
+          fetch(`${API_URL}/api/subjects?page=1&pageSize=10`),
+          fetch(`${API_URL}/api/classes?page=1&pageSize=10`)
         ]);
         setSubjects(await subjectRes.json());
         setClasses(await classRes.json());
@@ -118,7 +118,7 @@ const Schedule = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) =>
           throw new Error('Failed to fetch schedule data');
         }
         const data = await response.json();
-        setSections(data);
+        setSections(Array.isArray(data.items) ? data.items : []);
         setError(null);
       } catch (err) {
         setError('Không thể tải lịch giảng dạy. Vui lòng thử lại sau.');

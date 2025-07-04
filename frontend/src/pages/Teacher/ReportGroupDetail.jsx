@@ -17,7 +17,7 @@ const ReportGroupDetail = ({ user }) => {
       setError('');
       try {
         // Lấy danh sách report student trong group này
-        const res = await fetch(`${API_URL}/api/report-students/report-group/${reportGroupId}`);
+        const res = await fetch(`${API_URL}/api/report-students/report-group/${reportGroupId}?page=1&pageSize=10`);
         if (!res.ok) throw new Error('Không tìm thấy báo cáo');
         const data = await res.json();
         if (data.length > 0) {

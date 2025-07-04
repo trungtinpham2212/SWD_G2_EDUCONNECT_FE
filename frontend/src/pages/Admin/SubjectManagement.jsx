@@ -15,17 +15,25 @@ const SubjectManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [subjectToDelete, setSubjectToDelete] = useState(null);
 
+  // Helper lấy token từ localStorage
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem('token');
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
+
   const fetchData = async () => {
     try {
       setLoading(true);
       const [subjectRes, teacherRes, userRes] = await Promise.all([
-        fetch(`${API_URL}/api/subjects`),
-        fetch(`${API_URL}/api/teachers`),
-        fetch(`${API_URL}/api/user-accounts`)
+        fetch(`${API_URL}/api/subjects?page=1&pageSize=15`, { headers: getAuthHeaders() }),
+        fetch(`${API_URL}/api/teachers?page=1&pageSize=20`, { headers: getAuthHeaders() }),
+        fetch(`${API_URL}/api/user-accounts`, { headers: getAuthHeaders() })
       ]);
-      const subjectData = await subjectRes.json();
-      const teacherData = await teacherRes.json();
+      const subjectDataRaw = await subjectRes.json();
+      const teacherDataRaw = await teacherRes.json();
       const userData = await userRes.json();
+      const subjectData = Array.isArray(subjectDataRaw.items) ? subjectDataRaw.items : [];
+      const teacherData = Array.isArray(teacherDataRaw.items) ? teacherDataRaw.items : [];
       setSubjects(subjectData);
       setTeachers(teacherData);
       setUserAccounts(userData);
@@ -88,7 +96,7 @@ const SubjectManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
       if (editingSubject) {
         const response = await fetch(`${API_URL}/api/subjects/${editingSubject.subjectid}`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
           body: JSON.stringify({
             subjectid: editingSubject.subjectid,
             subjectname: form.subjectname,
@@ -107,7 +115,7 @@ const SubjectManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
       } else {
         const response = await fetch(`${API_URL}/api/subjects`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
           body: JSON.stringify({
             subjectname: form.subjectname,
             sections: [],
@@ -137,7 +145,8 @@ const SubjectManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
   const confirmDelete = async () => {
     try {
       const response = await fetch(`${API_URL}/api/subjects/${subjectToDelete}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: getAuthHeaders()
       });
       if (response.ok) {
         await fetchData();
@@ -155,8 +164,8 @@ const SubjectManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
   };
 
   // Lấy danh sách giáo viên dạy môn này
-  const getTeachersOfSubject = (subjectid) => {
-    const filteredTeachers = teachers.filter(t => String(t.subjectid) === String(subjectid));
+  const getTeachersOfSubject = (subject) => {
+    const filteredTeachers = subject && Array.isArray(subject.teachers) ? subject.teachers : [];
     return filteredTeachers.map(t => {
       const user = userAccounts.find(u => u.userid === t.userid);
       return user ? user.fullname : `GV ${t.teacherid}`;
@@ -187,32 +196,30 @@ const SubjectManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {subjects.length === 0 ? (
+                {Array.isArray(subjects) ? subjects.map((subject, idx) => (
+                  <tr key={subject.subjectid}>
+                    <td className="px-4 py-2 text-sm text-gray-500">{idx + 1}</td>
+                    <td className="px-4 py-2 text-sm text-gray-900">{subject.subjectname}</td>
+                    <td className="px-4 py-2 text-sm text-gray-900">
+                      {getTeachersOfSubject(subject).length === 0 ? (
+                        <span className="text-gray-400">Chưa có giáo viên</span>
+                      ) : (
+                        <ul className="list-disc ml-4">
+                          {getTeachersOfSubject(subject).map((teacher, index) => (
+                            <li key={index}>{teacher}</li>
+                          ))}
+                        </ul>
+                      )}
+                    </td>
+                    <td className="px-4 py-2 text-sm text-gray-900">
+                      <button className="px-3 py-1 bg-yellow-600 text-white rounded hover:bg-yellow-700 mr-2" onClick={() => handleOpenModal(subject)}>Sửa</button>
+                      <button className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700" onClick={() => handleDelete(subject.subjectid)}>Xóa</button>
+                    </td>
+                  </tr>
+                )) : (
                   <tr>
                     <td colSpan="4" className="px-4 py-4 text-center text-gray-500">Không có môn học nào</td>
                   </tr>
-                ) : (
-                  subjects.map((subject, idx) => (
-                    <tr key={subject.subjectid}>
-                      <td className="px-4 py-2 text-sm text-gray-500">{idx + 1}</td>
-                      <td className="px-4 py-2 text-sm text-gray-900">{subject.subjectname}</td>
-                      <td className="px-4 py-2 text-sm text-gray-900">
-                        {getTeachersOfSubject(subject.subjectid).length === 0 ? (
-                          <span className="text-gray-400">Chưa có giáo viên</span>
-                        ) : (
-                          <ul className="list-disc ml-4">
-                            {getTeachersOfSubject(subject.subjectid).map((teacher, index) => (
-                              <li key={index}>{teacher}</li>
-                            ))}
-                          </ul>
-                        )}
-                      </td>
-                      <td className="px-4 py-2 text-sm text-gray-900">
-                        <button className="px-3 py-1 bg-yellow-600 text-white rounded hover:bg-yellow-700 mr-2" onClick={() => handleOpenModal(subject)}>Sửa</button>
-                        <button className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700" onClick={() => handleDelete(subject.subjectid)}>Xóa</button>
-                      </td>
-                    </tr>
-                  ))
                 )}
               </tbody>
             </table>

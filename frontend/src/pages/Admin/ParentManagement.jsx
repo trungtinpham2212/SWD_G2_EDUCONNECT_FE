@@ -28,21 +28,26 @@ const ParentManagement = ({ user, active, setActive, isSidebarOpen, setSidebarOp
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [userToDelete, setUserToDelete] = useState(null);
 
+  // Helper lấy token từ localStorage
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem('token');
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
 
   const fetchData = async () => {
     try {
       setLoading(true);
       const [userRes, studentRes, classRes] = await Promise.all([
-        fetch(`${API_URL}/api/user-accounts`),
-        fetch(`${API_URL}/api/students`),
-        fetch(`${API_URL}/api/classes`)
+        fetch(`${API_URL}/api/user-accounts`, { headers: getAuthHeaders() }),
+        fetch(`${API_URL}/api/students?page=1&pageSize=100`, { headers: getAuthHeaders() }),
+        fetch(`${API_URL}/api/classes?page=1&pageSize=10`, { headers: getAuthHeaders() })
       ]);
       const userData = await userRes.json();
       const studentData = await studentRes.json();
       const classData = await classRes.json();
       setParents(userData.filter(u => u.roleid === 3));
-      setStudents(studentData);
-      setClasses(classData);
+      setStudents(Array.isArray(studentData.items) ? studentData.items : []);
+      setClasses(Array.isArray(classData.items) ? classData.items : []);
       setError(null);
     } catch (err) {
       setError('Không thể tải dữ liệu phụ huynh. Vui lòng thử lại sau.');
@@ -56,7 +61,7 @@ const ParentManagement = ({ user, active, setActive, isSidebarOpen, setSidebarOp
   }, []);
 
   const getChildren = (parentid) => {
-    return students.filter(stu => stu.parentid === parentid);
+    return (Array.isArray(students) ? students : []).filter(stu => stu.parentid === parentid);
   };
 
   const getClassName = (classid) => {
@@ -113,19 +118,17 @@ const ParentManagement = ({ user, active, setActive, isSidebarOpen, setSidebarOp
     try {
       if (editingUser) {
         // Sửa tài khoản
-        const response = await fetch(`${API_URL}/api/UserAccount/update/${editingUser.userid}`, {
+        const formData = new FormData();
+        formData.append('Password', form.password);
+        formData.append('Fullname', form.fullname);
+        formData.append('Email', form.email);
+        formData.append('PhoneNumber', form.phoneNumber);
+        formData.append('Address', form.address);
+        formData.append('RoleId', form.role);
+        const response = await fetch(`${API_URL}/api/user-accounts/${editingUser.userid}`, {
           method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            password: form.password,
-            fullname: form.fullname,
-            email: form.email,
-            phoneNumber: form.phoneNumber,
-            address: form.address,
-            roleId: form.role
-          })
+          headers: { ...getAuthHeaders() },
+          body: formData
         });
         const text = await response.text();
         const normalized = text.replace(/"/g, '').trim();
@@ -138,11 +141,9 @@ const ParentManagement = ({ user, active, setActive, isSidebarOpen, setSidebarOp
         }
       } else {
         // Tạo mới
-        const response = await fetch(`${API_URL}/api/UserAccount/register`, {
+        const response = await fetch(`${API_URL}/api/user-accounts/register`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
+          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
           body: JSON.stringify({
             username: form.username,
             password: form.password,
@@ -150,7 +151,7 @@ const ParentManagement = ({ user, active, setActive, isSidebarOpen, setSidebarOp
             email: form.email,
             phoneNumber: form.phoneNumber,
             address: form.address,
-            roleId: form.role
+            roleId: 3
           })
         });
         const text = await response.text();
@@ -178,8 +179,9 @@ const ParentManagement = ({ user, active, setActive, isSidebarOpen, setSidebarOp
   const confirmDelete = async () => {
     setIsDeleting(true);
     try {
-      const response = await fetch(`${API_URL}/api/UserAccount/${userToDelete}`, {
-        method: 'DELETE'
+      const response = await fetch(`${API_URL}/api/user-accounts/${userToDelete}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders()
       });
       if (response.ok) {
         await fetchData();

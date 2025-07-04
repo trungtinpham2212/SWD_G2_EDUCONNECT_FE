@@ -30,50 +30,98 @@ const ActivityLog = ({ user, active, setActive, isSidebarOpen, setSidebarOpen })
   const [error, setError] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [filterType, setFilterType] = useState('');
+  const [totalCount, setTotalCount] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [allLogs, setAllLogs] = useState([]);
+  const [isFetchingAll, setIsFetchingAll] = useState(false);
+
+  // Helper lấy token từ localStorage
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem('token');
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const [logRes, userRes] = await Promise.all([
-          fetch(`${API_URL}/api/log-activities`),
-          fetch(`${API_URL}/api/user-accounts`)
-        ]);
-        const logData = await logRes.json();
-        const userData = await userRes.json();
-        setLogs(logData);
-        setUsers(userData);
         setError(null);
+        if (!filterType) {
+          // Không filter, phân trang backend
+          const [logRes, userRes] = await Promise.all([
+            fetch(`${API_URL}/api/log-activities?page=${currentPage}&pageSize=${ITEMS_PER_PAGE}`, { headers: getAuthHeaders() }),
+            fetch(`${API_URL}/api/user-accounts`, { headers: getAuthHeaders() })
+          ]);
+          const logDataRaw = await logRes.json();
+          const userData = await userRes.json();
+          const logData = Array.isArray(logDataRaw.items) ? logDataRaw.items : [];
+          setLogs(logData);
+          setUsers(userData);
+          setTotalCount(logDataRaw.totalCount || logData.length);
+          setTotalPages(logDataRaw.totalPages || 1);
+          setAllLogs([]); // reset allLogs khi bỏ filter
+        } else {
+          // Có filter, lấy toàn bộ log rồi lọc trên client
+          setIsFetchingAll(true);
+          // Lấy tổng số trang
+          const firstRes = await fetch(`${API_URL}/api/log-activities?page=1&pageSize=${ITEMS_PER_PAGE}`, { headers: getAuthHeaders() });
+          const firstData = await firstRes.json();
+          const userRes = await fetch(`${API_URL}/api/user-accounts`, { headers: getAuthHeaders() });
+          const userData = await userRes.json();
+          const totalPages = firstData.totalPages || 1;
+          let all = Array.isArray(firstData.items) ? firstData.items : [];
+          // Lấy các trang còn lại
+          const fetches = [];
+          for (let i = 2; i <= totalPages; i++) {
+            fetches.push(fetch(`${API_URL}/api/log-activities?page=${i}&pageSize=${ITEMS_PER_PAGE}`, { headers: getAuthHeaders() }));
+          }
+          const results = await Promise.all(fetches);
+          for (const res of results) {
+            const data = await res.json();
+            if (Array.isArray(data.items)) all = all.concat(data.items);
+          }
+          setUsers(userData);
+          setAllLogs(all);
+          setIsFetchingAll(false);
+        }
       } catch (err) {
         setError('Không thể tải dữ liệu lịch sử hoạt động. Vui lòng thử lại sau.');
+        setIsFetchingAll(false);
       } finally {
         setLoading(false);
       }
     };
     fetchData();
-  }, []);
+  }, [currentPage, filterType]);
 
-  const getUserName = (userid) => {
-    const u = users.find(user => user.userid === userid);
-    return u ? u.fullname : `User ${userid}`;
-  };
-
+  // Khi filter, phân trang client trên allLogs đã lọc
   const filteredLogs = filterType
-    ? logs.filter(log => String(log.logactivitytype) === String(filterType))
+    ? allLogs.filter(log => String(log.logactivitytype) === String(filterType))
+    : logs;
+  const totalFiltered = filteredLogs.length;
+  const totalFilteredPages = Math.max(1, Math.ceil(totalFiltered / ITEMS_PER_PAGE));
+  const paginatedLogs = filterType
+    ? filteredLogs.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE)
     : logs;
 
-  // Sort logs mới nhất lên đầu
-  const sortedLogs = [...filteredLogs].sort((a, b) => {
-    const dateA = a.createat ? new Date(a.createat) : new Date(0);
-    const dateB = b.createat ? new Date(b.createat) : new Date(0);
-    return dateB - dateA;
-  });
+  // Khi đổi filter, reset về trang 1
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filterType]);
 
-  const totalPages = Math.ceil(sortedLogs.length / ITEMS_PER_PAGE);
-  const paginatedLogs = sortedLogs.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+  const getUserName = (log) => {
+    // Ưu tiên lấy fullname từ users API
+    if (log.userid && Array.isArray(users)) {
+      const user = users.find(u => u.userid === log.userid);
+      if (user && user.fullname) return user.fullname;
+    }
+    if (log.user && typeof log.user === 'object' && log.user.fullname) return log.user.fullname;
+    if (typeof log.user === 'string') return log.user;
+    return `User ${log.userid}`;
+  };
 
   const handlePageChange = (page) => {
-    if (page >= 1 && page <= totalPages) setCurrentPage(page);
+    if (page >= 1 && page <= (filterType ? totalFilteredPages : totalPages)) setCurrentPage(page);
   };
 
   return (
@@ -116,13 +164,13 @@ const ActivityLog = ({ user, active, setActive, isSidebarOpen, setSidebarOpen })
                 <tbody className="bg-white divide-y divide-gray-200">
                   {paginatedLogs.length === 0 ? (
                     <tr>
-                      <td colSpan="5" className="px-4 py-4 text-center text-gray-500">Không có dữ liệu</td>
+                      <td colSpan="5" className="px-4 py-4 text-center text-gray-500">{isFetchingAll ? 'Đang tải toàn bộ dữ liệu...' : 'Không có dữ liệu'}</td>
                     </tr>
                   ) : (
                     paginatedLogs.map((log, idx) => (
                       <tr key={log.logactivityid}>
                         <td className="px-4 py-2 text-sm text-gray-500">{(currentPage - 1) * ITEMS_PER_PAGE + idx + 1}</td>
-                        <td className="px-4 py-2 text-sm text-gray-900">{getUserName(log.userid)}</td>
+                        <td className="px-4 py-2 text-sm text-gray-900">{getUserName(log)}</td>
                         <td className="px-4 py-2 text-sm text-gray-900">{LOG_TYPE_MAP[log.logactivitytype] || log.logactivitytype}</td>
                         <td className="px-4 py-2 text-sm text-gray-900 max-w-xs whitespace-pre-line break-words">{log.note}</td>
                         <td className="px-4 py-2 text-sm text-gray-900">{log.createat ? new Date(log.createat).toLocaleString('vi-VN') : '-'}</td>
@@ -141,7 +189,7 @@ const ActivityLog = ({ user, active, setActive, isSidebarOpen, setSidebarOpen })
               >
                 &lt;
               </button>
-              {Array.from({ length: totalPages }, (_, i) => (
+              {Array.from({ length: filterType ? totalFilteredPages : totalPages }, (_, i) => (
                 <button
                   key={i}
                   className={`px-3 py-1 rounded border ${currentPage === i + 1 ? 'bg-blue-500 text-white' : 'bg-gray-100 hover:bg-gray-200'}`}
@@ -153,7 +201,7 @@ const ActivityLog = ({ user, active, setActive, isSidebarOpen, setSidebarOpen })
               <button
                 className="px-3 py-1 rounded border bg-gray-100 hover:bg-gray-200"
                 onClick={() => handlePageChange(currentPage + 1)}
-                disabled={currentPage === totalPages}
+                disabled={currentPage === (filterType ? totalFilteredPages : totalPages)}
               >
                 &gt;
               </button>

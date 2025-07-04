@@ -83,7 +83,7 @@ const SessionDetail = () => {
         const sessionData = await sessionRes.json();
         setSessionInfo(sessionData);
 
-        const classRes = await fetch(`${API_URL}/api/classes`);
+        const classRes = await fetch(`${API_URL}/api/classes?page=1&pageSize=10`);
         if (!classRes.ok) throw new Error('Không thể tải dữ liệu lớp');
         const classData = await classRes.json();
         const foundClass = classData.find(cls => cls.classid === sessionData.classid);
@@ -94,7 +94,7 @@ const SessionDetail = () => {
           return;
         }
 
-        const studentRes = await fetch(`${API_URL}/api/students`);
+        const studentRes = await fetch(`${API_URL}/api/students?page=1&pageSize=10`);
         const studentData = await studentRes.json();
         const filteredStudents = studentData.filter(stu => stu.classid === foundClass.classid);
         setStudents(filteredStudents);
@@ -103,7 +103,7 @@ const SessionDetail = () => {
         const parentData = await parentRes.json();
         setParentAccounts(parentData);
 
-        const teacherRes = await fetch(`${API_URL}/api/teachers`);
+        const teacherRes = await fetch(`${API_URL}/api/teachers?page=1&pageSize=10`);
         const teacherData = await teacherRes.json();
         const teacher = teacherData.find(t => t.teacherid === foundClass.teacherhomeroomid);
         let name = 'Không rõ';

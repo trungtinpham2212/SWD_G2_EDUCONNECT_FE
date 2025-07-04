@@ -38,9 +38,9 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
 
         // Lấy tất cả section mà giáo viên này dạy
         const [sectionRes, classRes, evalRes, activityRes] = await Promise.all([
-          fetch(`${API_URL}/api/periods`, { headers }),
-          fetch(`${API_URL}/api/classes`, { headers }),
-          fetch(`${API_URL}/api/evaluations/by-teacher/${user?.teacherId}`, { headers }),
+          fetch(`${API_URL}/api/periods?page=1&pageSize=10`, { headers }),
+          fetch(`${API_URL}/api/classes?page=1&pageSize=10`, { headers }),
+          fetch(`${API_URL}/api/evaluations/by-teacher/${user?.teacherId}?page=1&pageSize=10`, { headers }),
           fetch(`${API_URL}/api/activities`, { headers })
         ]);
 

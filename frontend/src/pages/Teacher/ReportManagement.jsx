@@ -25,7 +25,7 @@ const ReportManagement = ({ user }) => {
       setError('');
       try {
         const teacherId = user?.teacherId || localStorage.getItem('teacherId');
-        const res = await fetch(`${API_URL}/api/report-groups/teacher/${teacherId}`);
+        const res = await fetch(`${API_URL}/api/report-groups/teacher/${teacherId}?page=1&pageSize=10`);
         if (!res.ok) throw new Error('Không thể tải danh sách báo cáo');
         const data = await res.json();
         setReportGroups(data);
@@ -40,12 +40,12 @@ const ReportManagement = ({ user }) => {
     // Lấy danh sách học sinh lớp chủ nhiệm
     const fetchHomeroom = async () => {
       try {
-        const classRes = await fetch(`${API_URL}/api/classes`);
+        const classRes = await fetch(`${API_URL}/api/classes?page=1&pageSize=10`);
         const classData = await classRes.json();
         const foundClass = classData.find(cls => cls.teacherhomeroomid === user.teacherId);
         setHomeroomClass(foundClass || null);
         if (foundClass) {
-          const studentRes = await fetch(`${API_URL}/api/students`);
+          const studentRes = await fetch(`${API_URL}/api/students?page=1&pageSize=10`);
           const studentData = await studentRes.json();
           const filtered = studentData.filter(s => s.classid === foundClass.classid);
           setStudents(filtered);
@@ -108,7 +108,7 @@ const ReportManagement = ({ user }) => {
       setEndDate(dayjs().format('YYYY-MM-DD'));
       // Reload group list
       const teacherId = user?.teacherId || localStorage.getItem('teacherId');
-      const reload = await fetch(`${API_URL}/api/report-groups/teacher/${teacherId}`);
+      const reload = await fetch(`${API_URL}/api/report-groups/teacher/${teacherId}?page=1&pageSize=10`);
       setReportGroups(await reload.json());
     } catch (e) {
       alert(e.message || 'Tạo báo cáo thất bại');

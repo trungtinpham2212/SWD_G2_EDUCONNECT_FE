@@ -58,7 +58,7 @@ const ParentDashboard = ({ user, active, setActive, isSidebarOpen, setSidebarOpe
         setLoading(true);
         console.log('Đang lấy danh sách học sinh cho phụ huynh:', parentDetails.parentId);
         
-        const res = await fetch(`${API_URL}/api/students/parent/${parentDetails.parentId}`);
+        const res = await fetch(`${API_URL}/api/students/parent/${parentDetails.parentId}?page=1&pageSize=10`);
         if (!res.ok) {
           throw new Error('Không thể kết nối với server');
         }
@@ -101,19 +101,20 @@ const ParentDashboard = ({ user, active, setActive, isSidebarOpen, setSidebarOpe
         // Lấy tất cả dữ liệu cần thiết
         const [periodRes, subjectRes, classRes] = await Promise.all([
           fetch(`${API_URL}/api/periods`),
-          fetch(`${API_URL}/api/subjects`),
-          fetch(`${API_URL}/api/classes`)
+          fetch(`${API_URL}/api/subjects?page=1&pageSize=10`),
+          fetch(`${API_URL}/api/classes?page=1&pageSize=10`)
         ]);
 
         if (!periodRes.ok || !subjectRes.ok || !classRes.ok) {
           throw new Error('Một số API không phản hồi');
         }
 
-        const [periodsData, subjectsData, classesData] = await Promise.all([
+        const [periodsRaw, subjectsData, classesData] = await Promise.all([
           periodRes.json(),
           subjectRes.json(),
           classRes.json()
         ]);
+        const periodsData = Array.isArray(periodsRaw.items) ? periodsRaw.items : [];
 
         console.log('Tổng số tiết học đã tải:', periodsData.length);
         console.log('Số môn học:', subjectsData.length);

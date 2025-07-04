@@ -30,6 +30,7 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
   const [weeks, setWeeks] = useState([]);
   const [periodsLoading, setPeriodsLoading] = useState(false);
   const [periodsError, setPeriodsError] = useState(null);
+  const [periodEvaluations, setPeriodEvaluations] = useState({});
 
   // Define time slots for each period
   const timeSlots = [
@@ -71,6 +72,7 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
 
   // Cache cho dữ liệu
   const subjectsMap = useMemo(() => {
+    if (!Array.isArray(subjects)) return {};
     return subjects.reduce((acc, sub) => {
       acc[sub.subjectid] = sub.subjectname;
       return acc;
@@ -78,6 +80,7 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
   }, [subjects]);
 
   const teachersMap = useMemo(() => {
+    if (!Array.isArray(teachers)) return {};
     return teachers.reduce((acc, t) => {
       const u = userAccounts.find(u => u.userid === t.userid);
       acc[t.teacherid] = u ? u.fullname : `GV ${t.teacherid}`;
@@ -193,13 +196,13 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
       try {
         setLoading(true);
         const [subjectRes, classRes, teacherRes, userRes, activityRes, schoolYearRes, studentRes] = await Promise.all([
-          fetch(`${API_URL}/api/subjects`),
-          fetch(`${API_URL}/api/classes`),
-          fetch(`${API_URL}/api/teachers`),
+          fetch(`${API_URL}/api/subjects?page=1&pageSize=15`),
+          fetch(`${API_URL}/api/classes?page=1&pageSize=30`),
+          fetch(`${API_URL}/api/teachers?page=1&pageSize=30`),
           fetch(`${API_URL}/api/user-accounts`),
           fetch(`${API_URL}/api/activities`),
           fetch(`${API_URL}/api/school-years`),
-          fetch(`${API_URL}/api/students`)
+          fetch(`${API_URL}/api/students?page=1&pageSize=400`)
         ]);
         if (!subjectRes.ok || !classRes.ok || !teacherRes.ok || !userRes.ok || !activityRes.ok || !schoolYearRes.ok || !studentRes.ok) {
           throw new Error('Một hoặc nhiều API call thất bại');
@@ -213,13 +216,13 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
           schoolYearRes.json(),
           studentRes.json()
         ]);
-        setSubjects(subjectData);
-        setClasses(classData);
-        setTeachers(teacherData);
+        setSubjects(Array.isArray(subjectData.items) ? subjectData.items : []);
+        setClasses(Array.isArray(classData.items) ? classData.items : []);
+        setTeachers(Array.isArray(teacherData.items) ? teacherData.items : []);
         setUserAccounts(userData);
         setActivities(activityData);
         setSchoolYears(schoolYearData);
-        setStudents(studentData);
+        setStudents(Array.isArray(studentData.items) ? studentData.items : []);
         setError(null);
         // Mặc định chọn năm học chứa ngày 2/12/2024
         const defaultDate = new Date('2024-12-02');
@@ -257,57 +260,77 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
     setSelectedWeek(foundWeek || null);
   }, [selectedSchoolYear, schoolYears]);
 
-  // Fetch periods và evaluations theo tuần và lớp (by-range-class)
+  // Thêm hàm fetchPeriodsForCurrentWeek
+  const fetchPeriodsForCurrentWeek = useCallback(async () => {
+    if (!selectedWeek || !classes.length) return;
+    setPeriodsLoading(true);
+    setPeriodsError(null);
+    try {
+      // Lấy periods cho tuần và lớp hiện tại
+      const classIds = selectedClass === 'all' ? classes.map(c => c.classid) : [Number(selectedClass)];
+      const promises = classIds.map(clsId =>
+        fetch(`${API_URL}/api/periods/by-range-class?startDate=${selectedWeek.start}&endDate=${selectedWeek.end}&classId=${clsId}&page=1&pageSize=50`)
+      );
+      const results = await Promise.all(promises);
+      const jsons = await Promise.all(results.map(r => r.ok ? r.json() : { items: [] }));
+      const allSections = jsons.flatMap(j => Array.isArray(j.items) ? j.items : []);
+      setSections(allSections);
+    } catch (err) {
+      setSections([]);
+      setPeriodsError('Không thể tải dữ liệu tiết học cho tuần này.');
+    } finally {
+      setPeriodsLoading(false);
+    }
+  }, [selectedWeek, classes, selectedClass]);
+
+  // Sử dụng fetchPeriodsForCurrentWeek trong useEffect
+  useEffect(() => {
+    fetchPeriodsForCurrentWeek();
+  }, [fetchPeriodsForCurrentWeek]);
+
+  // Fetch evaluations cho tất cả period trong tuần khi selectedWeek thay đổi
   useEffect(() => {
     if (!selectedWeek) return;
-    const fetchPeriodsAndEvaluations = async () => {
+    const fetchEvaluations = async () => {
       try {
-        setPeriodsLoading(true);
-        setPeriodsError(null);
-        let allSections = [];
-        if (selectedClass === 'all') {
-          // Gọi cho từng classId
-          const promises = classes.map(cls =>
-            fetch(`${API_URL}/api/periods/by-range-class?startDate=${selectedWeek.start}&endDate=${selectedWeek.end}&classId=${cls.classid}`)
-          );
-          const results = await Promise.all(promises);
-          const jsons = await Promise.all(results.map(r => r.ok ? r.json() : []));
-          allSections = jsons.flat();
-        } else {
-          const res = await fetch(`${API_URL}/api/periods/by-range-class?startDate=${selectedWeek.start}&endDate=${selectedWeek.end}&classId=${selectedClass}`);
-          if (!res.ok) throw new Error('Không thể tải dữ liệu tiết học');
-          allSections = await res.json();
-        }
-        // Chuẩn hóa dữ liệu sections
-        const normalizedSections = allSections.map(section => ({
-          ...section,
-          classid: Number(section.classid),
-          subjectid: Number(section.subjectid),
-          teacherid: Number(section.teacherid),
-          period: Number(section.periodno || section.period),
-          perioddate: section.perioddate.includes('T') 
-            ? section.perioddate.split('T')[0] 
-            : section.perioddate
-        }));
-        setSections(normalizedSections);
-        // Fetch evaluations theo tuần
-        const evalRes = await fetch(`${API_URL}/api/evaluations/by-date-range?startDate=${selectedWeek.start}&endDate=${selectedWeek.end}`);
-        if (evalRes.ok) {
-          const evalData = await evalRes.json();
-          setEvaluations(evalData);
-        } else {
+        const res = await fetch(`${API_URL}/api/evaluations/by-date-range?startDate=${selectedWeek.start}&endDate=${selectedWeek.end}&page=1&pageSize=500`);
+        if (!res.ok) {
           setEvaluations([]);
+          return;
         }
-      } catch (err) {
-        setSections([]);
+        const data = await res.json();
+        setEvaluations(Array.isArray(data.items) ? data.items : []);
+      } catch {
         setEvaluations([]);
-        setPeriodsError('Không thể tải dữ liệu tiết học cho tuần này.');
-      } finally {
-        setPeriodsLoading(false);
       }
     };
-    fetchPeriodsAndEvaluations();
-  }, [selectedWeek, selectedClass, classes]);
+    fetchEvaluations();
+  }, [selectedWeek]);
+
+  // Helper lấy tên môn học từ subjectid
+  const getSubjectNameById = useCallback((subjectid) => {
+    if (!subjectid || subjectid === 0) return '-';
+    const subject = Array.isArray(subjects) ? subjects.find(s => Number(s.subjectid) === Number(subjectid)) : null;
+    return subject && subject.subjectname && subject.subjectname !== 'string' ? subject.subjectname : '-';
+  }, [subjects]);
+
+  // Helper lấy fullname giáo viên từ teacherid
+  const getTeacherFullnameById = useCallback((teacherid) => {
+    const teacher = Array.isArray(teachers) ? teachers.find(t => t.teacherid === teacherid) : null;
+    if (!teacher) return '-';
+    const user = Array.isArray(userAccounts) ? userAccounts.find(u => u.userid === teacher.userid) : null;
+    return user ? user.fullname : '-';
+  }, [teachers, userAccounts]);
+
+  // Helper lấy evaluations cho 1 tiết học
+  const getEvaluationsForPeriod = useCallback((classid, periodno, date) => {
+    const dateStr = new Date(date).toISOString().split('T')[0];
+    return evaluations.filter(e =>
+      Number(e.classid) === Number(classid) &&
+      Number(e.periodno) === Number(periodno) &&
+      e.perioddate && e.perioddate.split('T')[0] === dateStr
+    );
+  }, [evaluations]);
 
   const getSubjectName = useCallback((subjectid) => {
     return subjectsMap[subjectid] || '-';
@@ -323,10 +346,15 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
   }, []);
 
   const getSectionForCell = useCallback((classId, periodNo, date) => {
+    // So sánh ngày chỉ lấy phần YYYY-MM-DD
     const dateStr = new Date(date).toISOString().split('T')[0];
-    const key = `${Number(classId)}-${Number(periodNo)}-${dateStr}`;
-    return sectionsByCell[key];
-  }, [sectionsByCell]);
+    return sections.find(
+      s =>
+        Number(s.classid) === Number(classId) &&
+        Number(s.periodno) === Number(periodNo) &&
+        s.perioddate && s.perioddate.split('T')[0] === dateStr
+    );
+  }, [sections]);
 
   // Kiểm tra trùng lịch
   const checkScheduleConflict = useCallback((classId, periodNo, date, teacherId, excludePeriodId = null) => {
@@ -479,14 +507,8 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
         throw new Error(errorMessage);
       }
 
-      // Reload data
-      const sectionRes = await fetch(`${API_URL}/api/periods`);
-      if (!sectionRes.ok) {
-        throw new Error('Không thể tải lại dữ liệu tiết học');
-      }
-      const sectionData = await sectionRes.json();
-      setSections(sectionData);
-      
+      // Reload periods tuần hiện tại
+      await fetchPeriodsForCurrentWeek();
       setShowModal(false);
       setSelectedCell(null);
       setIsEditMode(false);
@@ -509,10 +531,9 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
       setLoading(true);
       const res = await fetch(`${API_URL}/api/periods/${sectionToDelete}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Xóa tiết học thất bại');
-      
-      setSections(sections.filter(s => s.periodid !== sectionToDelete));
+      // Reload periods tuần hiện tại
+      await fetchPeriodsForCurrentWeek();
       toast.success('Xóa tiết học thành công!');
-
       // Đóng tất cả các modal
       setShowDeleteModal(false);
       setShowModal(false);
@@ -551,12 +572,9 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
     }
 
     // Kiểm tra và hiển thị thông tin môn học và giáo viên
-    const subjectName = getSubjectName(section.subjectid);
-    const teacherName = getTeacherName(section.teacherid);
-
-    // Kiểm tra đánh giá cho tiết học
-    const sectionEvaluations = getEvaluationsForSection(section.periodid);
-    const evaluationCount = sectionEvaluations.length;
+    const subjectName = section ? getSubjectNameById(section.subjectid) : '-';
+    const teacherFullname = section ? getTeacherFullnameById(section.teacherid) : '-';
+    const evals = section && evaluations.length > 0 ? evaluations.filter(e => e.periodid === section.periodid) : [];
 
     return (
       <div 
@@ -564,17 +582,17 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
         onClick={() => handleCellClick(classId, periodNo, date)}
       >
         <div className={`text-xs font-medium ${isPast ? 'text-yellow-800' : 'text-blue-800'}`}>
-          {subjectName !== '-' ? subjectName : 'Chưa có môn học'}
+          {subjectName !== '-' ? 'Môn học: ' + subjectName : 'Chưa có môn học'}
         </div>
         <div className={`text-xs ${isPast ? 'text-yellow-600' : 'text-blue-600'}`}>
-          {teacherName !== '-' ? 'Giáo viên: ' + teacherName : 'Chưa có giáo viên'}
+          {teacherFullname !== '-' ? 'Giáo viên: ' + teacherFullname : 'Chưa có giáo viên'}
         </div>
-        <div className={`text-xs font-medium mt-1 ${evaluationCount > 0 ? 'text-green-600' : 'text-gray-500'}`}>
-          {evaluationCount > 0 ? `Có ${evaluationCount} đánh giá` : 'Chưa có đánh giá'}
+        <div className={`text-xs font-medium mt-1 ${evals.length > 0 ? 'text-green-600' : 'text-gray-500'}`}>
+          {evals.length > 0 ? `Có ${evals.length} đánh giá` : 'Chưa có đánh giá'}
         </div>
       </div>
     );
-  }, [getSectionForCell, handleCellClick, getSubjectName, getTeacherName, isDateInPast, getEvaluationsForSection]);
+  }, [getSectionForCell, handleCellClick, getSubjectNameById, getTeacherFullnameById, isDateInPast, evaluations]);
 
   const generateWeekDates = useMemo(() => {
     if (!selectedWeek) return [];
@@ -638,7 +656,7 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
             className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="all">Tất cả các lớp</option>
-            {classes.map(cls => (
+            {(Array.isArray(classes) ? classes : []).map(cls => (
               <option key={cls.classid} value={cls.classid}>{cls.classname}</option>
             ))}
           </select>
@@ -700,7 +718,7 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
                       return weekDates.map((date, dateIndex) => (
                         <td key={dateIndex} className="border border-gray-300 p-0">
                           <div className="grid grid-cols-1">
-                            {displayClasses.map(cls => (
+                            {(Array.isArray(displayClasses) ? displayClasses : []).map((cls, idx) => (
                               <div key={cls.classid} className="border-b border-gray-200 last:border-b-0">
                                 <div className="text-xs text-gray-500 px-2 py-1 bg-gray-50">
                                   {cls.classname}
