@@ -59,7 +59,7 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
   const [error, setError] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [sortField, setSortField] = useState('createdat'); // 'perioddate' hoặc 'createdat'
-  const [sortAsc, setSortAsc] = useState(false);
+  const [sortAsc, setSortAsc] = useState(false); // false để mặc định là giảm dần (mới nhất lên đầu)
   const location = useLocation();
   const [showStudentModal, setShowStudentModal] = useState(false);
   const [modalStudents, setModalStudents] = useState([]);
@@ -163,59 +163,6 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
     return filtered;
   }, [evaluationsInWeek, selectedClass, selectedType, activities]);
 
-  const totalFiltered = filteredEvaluations.length;
-  const totalFilteredPages = Math.max(1, Math.ceil(totalFiltered / pageSize));
-  const paginatedEvaluations = filteredEvaluations.slice((currentPage - 1) * pageSize, currentPage * pageSize);
-
-  // Khi đổi filter, reset về trang 1
-  useEffect(() => { setCurrentPage(1); }, [selectedClass, selectedType, selectedWeek, selectedSchoolYear]);
-
-  const getSectionInfo = (periodid) => sections.find(sec => Number(sec.periodid) === Number(periodid));
-  const getClassName = (classid) => {
-    const cls = classes.find(c => Number(c.classid) === Number(classid));
-    return cls ? cls.classname : `Lớp ${classid}`;
-  };
-
-  const getDateTime = (datetime) => {
-    if (!datetime) return '-';
-    const d = new Date(datetime);
-    return d.toLocaleDateString('vi-VN') + ' ' + d.toLocaleTimeString('vi-VN', { hour12: false });
-  };
-
-  const handleShowStudents = (evaluation) => {
-    if (evaluation?.students?.length > 0) {
-      setModalStudents(evaluation.students);
-    } else {
-      setModalStudents([]);
-    }
-    setCurrentEvaluation(evaluation);
-    setShowStudentModal(true);
-  };
-
-  const getStudentPreview = (evaluation) => {
-    if (!evaluation?.students?.length) return '(0)';
-    
-    // Tìm lớp của học sinh đầu tiên
-    const firstStudent = evaluation.students[0];
-    if (!firstStudent?.classid) return `(${evaluation.students.length})`;
-
-    // Lấy danh sách học sinh trong lớp đó
-    const classStudents = evaluations
-      .filter(e => e.students?.length > 0 && e.students[0].classid === firstStudent.classid)
-      .flatMap(e => e.students);
-    
-    // Lấy số lượng học sinh duy nhất trong lớp
-    const uniqueStudents = new Set(classStudents.map(s => s.studentid));
-    const classSize = uniqueStudents.size;
-    
-    // Nếu số học sinh trong đánh giá bằng sĩ số lớp
-    if (evaluation.students.length === classSize) {
-      return 'cả lớp';
-    }
-    
-    return `${evaluation.students.length} học sinh`;
-  };
-
   // Lọc và sắp xếp evaluations
   const filteredAndSortedEvaluations = useMemo(() => {
     let filtered = [...evaluations];
@@ -250,7 +197,6 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
     // Sắp xếp
     return filtered.sort((a, b) => {
       let dateA, dateB;
-      
       if (sortField === 'perioddate') {
         const secA = getSectionInfo(a.periodid);
         const secB = getSectionInfo(b.periodid);
@@ -261,7 +207,6 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
         dateA = new Date(a.createdat);
         dateB = new Date(b.createdat);
       }
-      
       return sortAsc ? dateA - dateB : dateB - dateA;
     });
   }, [evaluations, sections, selectedClass, selectedType, selectedDate, activities, sortField, sortAsc]);
@@ -381,6 +326,60 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
     };
     fetchActivities();
   }, []);
+
+  // Khi render bảng, dùng filteredAndSortedEvaluations để slice phân trang
+  const totalFiltered = filteredAndSortedEvaluations.length;
+  const totalFilteredPages = Math.max(1, Math.ceil(totalFiltered / pageSize));
+  const paginatedEvaluations = filteredAndSortedEvaluations.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  // Khi đổi filter, reset về trang 1
+  useEffect(() => { setCurrentPage(1); }, [selectedClass, selectedType, selectedWeek, selectedSchoolYear]);
+
+  const getSectionInfo = (periodid) => sections.find(sec => Number(sec.periodid) === Number(periodid));
+  const getClassName = (classid) => {
+    const cls = classes.find(c => Number(c.classid) === Number(classid));
+    return cls ? cls.classname : `Lớp ${classid}`;
+  };
+
+  const getDateTime = (datetime) => {
+    if (!datetime) return '-';
+    const d = new Date(datetime);
+    return d.toLocaleDateString('vi-VN') + ' ' + d.toLocaleTimeString('vi-VN', { hour12: false });
+  };
+
+  const handleShowStudents = (evaluation) => {
+    if (evaluation?.students?.length > 0) {
+      setModalStudents(evaluation.students);
+    } else {
+      setModalStudents([]);
+    }
+    setCurrentEvaluation(evaluation);
+    setShowStudentModal(true);
+  };
+
+  const getStudentPreview = (evaluation) => {
+    if (!evaluation?.students?.length) return '(0)';
+    
+    // Tìm lớp của học sinh đầu tiên
+    const firstStudent = evaluation.students[0];
+    if (!firstStudent?.classid) return `(${evaluation.students.length})`;
+
+    // Lấy danh sách học sinh trong lớp đó
+    const classStudents = evaluations
+      .filter(e => e.students?.length > 0 && e.students[0].classid === firstStudent.classid)
+      .flatMap(e => e.students);
+    
+    // Lấy số lượng học sinh duy nhất trong lớp
+    const uniqueStudents = new Set(classStudents.map(s => s.studentid));
+    const classSize = uniqueStudents.size;
+    
+    // Nếu số học sinh trong đánh giá bằng sĩ số lớp
+    if (evaluation.students.length === classSize) {
+      return 'cả lớp';
+    }
+    
+    return `${evaluation.students.length} học sinh`;
+  };
 
   return (
     <div className="flex-1 p-6">
