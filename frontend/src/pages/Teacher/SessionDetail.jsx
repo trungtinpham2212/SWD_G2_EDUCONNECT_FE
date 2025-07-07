@@ -256,7 +256,7 @@ const SessionDetail = () => {
               <InfoItem icon={<CalendarIcon />} label="Ngày" value={new Date(sessionInfo.perioddate).toLocaleDateString('vi-VN')} />
               <InfoItem icon={<TeacherIcon />} label="Giáo viên CN" value={teacherName} />
               <InfoItem icon={<StudentsIcon />} label="Sĩ số" value={`${students.length} học sinh`} />
-              <InfoItem icon={<PeriodIcon />} label="Môn học" value={subjectName} />
+              {/* <InfoItem icon={<PeriodIcon />} label="Môn học" value={subjectName} /> */}
             </div>
           </div>
 
