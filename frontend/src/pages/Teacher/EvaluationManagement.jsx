@@ -98,7 +98,7 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
         let page = 1;
         let totalPages = 1;
         do {
-          const url = `${API_URL}/api/evaluations/by-teacher/${user?.teacherId}?page=${page}&pageSize=50`;
+          const url = `${API_URL}/api/evaluations/by-teacher/${user?.teacherId}?page=${page}&pageSize=${ITEMS_PER_PAGE}`;
           const evalRes = await fetch(url, { headers: getAuthHeaders() });
           if (!evalRes.ok) throw new Error('API call thất bại');
           const evalData = await evalRes.json();

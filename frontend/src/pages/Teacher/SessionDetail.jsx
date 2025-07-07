@@ -78,6 +78,7 @@ const SessionDetail = () => {
   const [evaluating, setEvaluating] = useState(false);
   const [activities, setActivities] = useState([]);
   const [selectedActivityId, setSelectedActivityId] = useState('');
+  const [subjectName, setSubjectName] = useState('');
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -89,6 +90,22 @@ const SessionDetail = () => {
         if (!sessionRes.ok) throw new Error('Không thể tải dữ liệu tiết học');
         const sessionData = await sessionRes.json();
         setSessionInfo(sessionData);
+        // Lấy tên môn học nếu có subjectid
+        if (sessionData.subjectid) {
+          try {
+            const subjectRes = await fetch(`${API_URL}/api/subjects/${sessionData.subjectid}`, { headers: { ...getAuthHeaders() } });
+            if (subjectRes.ok) {
+              const subjectData = await subjectRes.json();
+              setSubjectName(subjectData.subjectname || `Môn ${sessionData.subjectid}`);
+            } else {
+              setSubjectName(`Môn ${sessionData.subjectid}`);
+            }
+          } catch {
+            setSubjectName(`Môn ${sessionData.subjectid}`);
+          }
+        } else {
+          setSubjectName('-');
+        }
         // Lấy thông tin lớp
         const classRes = await fetch(`${API_URL}/api/classes/${sessionData.classid}`, { headers: { ...getAuthHeaders() } });
         if (!classRes.ok) throw new Error('Không thể tải dữ liệu lớp');
@@ -239,6 +256,7 @@ const SessionDetail = () => {
               <InfoItem icon={<CalendarIcon />} label="Ngày" value={new Date(sessionInfo.perioddate).toLocaleDateString('vi-VN')} />
               <InfoItem icon={<TeacherIcon />} label="Giáo viên CN" value={teacherName} />
               <InfoItem icon={<StudentsIcon />} label="Sĩ số" value={`${students.length} học sinh`} />
+              <InfoItem icon={<PeriodIcon />} label="Môn học" value={subjectName} />
             </div>
           </div>
 

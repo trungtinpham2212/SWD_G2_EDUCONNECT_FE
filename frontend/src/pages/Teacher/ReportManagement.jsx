@@ -4,7 +4,7 @@ import { FaSearch, FaEye, FaCalendarAlt, FaFileAlt, FaPlus, FaUserGraduate } fro
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
 
-const ITEMS_PER_PAGE = 15;
+const ITEMS_PER_PAGE = 9;
 
 const ReportManagement = ({ user }) => {
   const [reportGroups, setReportGroups] = useState([]);
