@@ -43,25 +43,31 @@ const Chatbot = ({ user }) => {
     scrollToBottom();
   }, [messages]);
 
-  // Simulate AI response
+  // Call AI API
   const generateAIResponse = async (userMessage) => {
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000));
-    
-    const responses = [
-      "Tôi hiểu câu hỏi của bạn. Hãy để tôi tìm hiểu thêm thông tin về vấn đề này.",
-      "Đây là một câu hỏi rất hay! Dựa trên thông tin hiện có, tôi có thể giúp bạn như sau...",
-      "Cảm ơn bạn đã hỏi. Tôi sẽ cố gắng trả lời câu hỏi này một cách chính xác nhất.",
-      "Tôi thấy bạn quan tâm đến vấn đề này. Hãy để tôi giải thích chi tiết hơn.",
-      "Đây là thông tin mà tôi có thể cung cấp cho bạn về chủ đề này.",
-      "Tôi hiểu mối quan tâm của bạn. Đây là cách chúng ta có thể giải quyết vấn đề này.",
-      "Dựa trên kinh nghiệm và dữ liệu, tôi khuyên bạn nên...",
-      "Tôi có thể giúp bạn tìm hiểu thêm về chủ đề này. Bạn có muốn biết thêm chi tiết không?",
-      "Đây là một số gợi ý mà tôi nghĩ có thể hữu ích cho bạn.",
-      "Tôi rất vui được hỗ trợ bạn. Hãy cho tôi biết nếu bạn cần thêm thông tin."
-    ];
-    
-    return responses[Math.floor(Math.random() * responses.length)];
+    try {
+      const response = await fetch(`${API_URL}/api/chat-boxes/chatbox/ask`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messagetext: userMessage,
+          parentId: user?.userId || 0
+        })
+      });
+      console.log(`${API_URL}/api/chat-boxes/chatbox/ask`);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      // Lấy đúng trường messagetext từ response
+      return data?.data?.messagetext || "Xin lỗi, tôi không thể xử lý câu hỏi của bạn lúc này.";
+    } catch (error) {
+      console.error('Error calling AI API:', error);
+      throw error;
+    }
   };
 
   const handleSendMessage = async () => {
@@ -150,6 +156,11 @@ const Chatbot = ({ user }) => {
     }
   };
 
+  // Thêm hàm chuyển **...** thành <strong>...</strong>
+  function boldBetweenStars(text) {
+    return text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+  }
+
   return (
     <div className="flex flex-col h-full bg-gray-50">
 
@@ -203,7 +214,14 @@ const Chatbot = ({ user }) => {
                   ? 'bg-blue-600 text-white rounded-br-none'
                   : 'bg-white text-gray-800 rounded-bl-none shadow-sm border border-gray-200'
               }`}>
-                <p className="text-sm whitespace-pre-wrap">{message.text}</p>
+                {message.sender === 'ai' ? (
+                  <p
+                    className="text-sm whitespace-pre-wrap"
+                    dangerouslySetInnerHTML={{ __html: boldBetweenStars(message.text) }}
+                  />
+                ) : (
+                  <p className="text-sm whitespace-pre-wrap">{message.text}</p>
+                )}
                 <p className={`text-xs mt-1 ${
                   message.sender === 'user' ? 'text-blue-100' : 'text-gray-400'
                 }`}>
