@@ -87,6 +87,19 @@ const ReportGroupDetail = ({ user }) => {
     if (reportGroupId) fetchGroupDetail();
   }, [reportGroupId, currentPage]);
 
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.innerHTML = `.student-tag { background: #2563eb; color: white; border-radius: 6px; padding: 0 6px; margin: 0 2px; font-weight: 600; font-size: 0.95em; display: inline-block; }`;
+    document.head.appendChild(style);
+    return () => { document.head.removeChild(style); };
+  }, []);
+
+  function getContentEditableText(html) {
+    const div = document.createElement('div');
+    div.innerHTML = html;
+    return div.textContent || div.innerText || '';
+  }
+
   const formatDate = (dateStr) => {
     if (!dateStr) return '';
     const d = new Date(dateStr);
@@ -105,6 +118,30 @@ const ReportGroupDetail = ({ user }) => {
     if (!text) return '';
     return text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
   }
+
+  // Hàm chuyển text sang HTML với tag cho tên học sinh
+  function wrapStudentTags(text, studentNames) {
+    if (!text) return '';
+    let replaced = text;
+    studentNames.forEach(name => {
+      // Regex: match tên học sinh ở đầu dòng, sau *, trong HTML, ...
+      const regex = new RegExp(`(\\b|^|[\\s\\*\\n\\r\\t>])(${name.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')})(?=$|\\b|[\\s\\*\\n\\r\\t<])`, 'g');
+      replaced = replaced.replace(regex, `$1<span class='student-tag' contenteditable='false'>@$2</span>`);
+    });
+    return replaced;
+  }
+
+  // CSS cho tag
+  const tagClass = {
+    background: '#2563eb',
+    color: 'white',
+    borderRadius: '6px',
+    padding: '0 6px',
+    margin: '0 2px',
+    fontWeight: 600,
+    fontSize: '0.95em',
+    display: 'inline-block',
+  };
 
   const handlePageChange = (page) => {
     if (page >= 1 && page <= totalPages) setCurrentPage(page);
@@ -161,6 +198,17 @@ const ReportGroupDetail = ({ user }) => {
     return false;
   };
 
+  // Hàm markdown + tag học sinh cho vùng nhập (edit mode)
+  function renderContentWithTagsAndMarkdown(text, studentNames) {
+    // Đầu tiên markdown, sau đó tag
+    const html = boldMarkdown(text);
+    return wrapStudentTags(html, studentNames);
+  }
+
+  // Lấy danh sách tất cả tên học sinh trong nhóm
+  const allStudentNames = studentReports.map(r => r.student?.name).filter(Boolean);
+  console.log('Danh sách tên học sinh:', allStudentNames);
+
   if (loading) {
     return (
       <div className="flex-1 flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
@@ -189,8 +237,18 @@ const ReportGroupDetail = ({ user }) => {
   }
   if (!group) {
     return (
-      <div className="flex-1 flex items-center justify-center min-h-screen">
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 text-yellow-600 text-lg">Không có dữ liệu báo cáo nhóm này.</div>
+      <div className="flex-1 p-6 w-full">
+        <div className="mb-6">
+          <button
+            className="px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:from-blue-600 hover:to-blue-700 transition-all duration-200 flex items-center gap-2 shadow-lg hover:shadow-xl"
+            onClick={() => navigate(-1)}
+          >
+            <FaArrowLeft /> Quay lại
+          </button>
+        </div>
+        <div className="flex items-center justify-center min-h-[300px]">
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 text-yellow-600 text-lg">Không có dữ liệu báo cáo nhóm này.</div>
+        </div>
       </div>
     );
   }
@@ -229,15 +287,28 @@ const ReportGroupDetail = ({ user }) => {
         <div className="mb-2 text-gray-600 flex items-center gap-2"><FaCalendarAlt /> {formatDate(group.startdate)} - {formatDate(group.enddate)}</div>
         <div className="mb-4">
           {isEditing ? (
-            <textarea
-              className="w-full border rounded p-4 font-medium text-lg min-h-[180px] mb-4"
-              value={editContent}
-              onChange={e => setEditContent(e.target.value)}
-              rows={8}
-              style={{ minHeight: '180px' }}
+            <div
+              className="w-full border rounded p-4 font-medium text-lg mb-4"
+              contentEditable
+              suppressContentEditableWarning
+              onInput={e => setEditContent(getContentEditableText(e.currentTarget.innerHTML))}
+              onKeyDown={e => {
+                // Xử lý xóa tag khi nhấn Backspace
+                const sel = window.getSelection();
+                if (e.key === 'Backspace' && sel && sel.anchorNode && sel.anchorNode.nodeType === 3) {
+                  const node = sel.anchorNode;
+                  const offset = sel.anchorOffset;
+                  if (offset === 0 && node.previousSibling && node.previousSibling.classList && node.previousSibling.classList.contains('student-tag')) {
+                    e.preventDefault();
+                    node.previousSibling.remove();
+                  }
+                }
+              }}
+              dangerouslySetInnerHTML={{ __html: renderContentWithTagsAndMarkdown(editContent, allStudentNames) }}
+              style={{ minHeight: '180px', maxHeight: '400px', overflowY: 'auto', whiteSpace: 'pre-wrap', width: '100%' }}
             />
           ) : (
-            <div className="text-gray-700 whitespace-pre-line border rounded p-4 bg-gray-50" dangerouslySetInnerHTML={{__html: boldMarkdown(group.content)}}></div>
+            <div className="text-gray-700 whitespace-pre-line border rounded p-4 bg-gray-50" style={{maxHeight:'none',overflow:'visible'}} dangerouslySetInnerHTML={{__html: wrapStudentTags(boldMarkdown(group.content), allStudentNames)}}></div>
           )}
         </div>
         <div className="mb-4">
@@ -265,20 +336,38 @@ const ReportGroupDetail = ({ user }) => {
                   <td className="px-4 py-2">{r.student?.name || r.studentid}</td>
                   <td className="px-4 py-2 text-sm whitespace-pre-line max-w-2xl break-words">
                     {isEditing ? (
-                      <textarea
-                        className="w-full border rounded p-3 font-medium text-base min-h-[120px]"
-                        value={editReportStudents[idx]?.content || ''}
-                        onChange={e => {
+                      <div
+                        className="w-full border rounded p-3 font-medium text-base"
+                        contentEditable
+                        suppressContentEditableWarning
+                        onInput={e => {
+                          const newContent = getContentEditableText(e.currentTarget.innerHTML);
                           const newArr = editReportStudents.map((item, i) =>
-                            i === idx ? { ...item, content: e.target.value } : { ...item }
+                            i === idx ? { ...item, content: newContent } : { ...item }
                           );
                           setEditReportStudents(newArr);
                         }}
-                        rows={5}
-                        style={{ minHeight: '120px' }}
+                        onKeyDown={e => {
+                          const sel = window.getSelection();
+                          if (e.key === 'Backspace' && sel && sel.anchorNode && sel.anchorNode.nodeType === 3) {
+                            const node = sel.anchorNode;
+                            const offset = sel.anchorOffset;
+                            if (offset === 0 && node.previousSibling && node.previousSibling.classList && node.previousSibling.classList.contains('student-tag')) {
+                              e.preventDefault();
+                              node.previousSibling.remove();
+                            }
+                          }
+                        }}
+                        dangerouslySetInnerHTML={{ __html: renderContentWithTagsAndMarkdown(editReportStudents[idx]?.content || '', allStudentNames) }}
+                        style={{ minHeight: '120px', maxHeight: '300px', overflowY: 'auto', whiteSpace: 'pre-wrap', width: '100%' }}
                       />
                     ) : (
-                      <div dangerouslySetInnerHTML={{__html: boldMarkdown(r.content)}}></div>
+                      <div
+                        dangerouslySetInnerHTML={{
+                          __html: wrapStudentTags(boldMarkdown(r.content), allStudentNames)
+                        }}
+                        style={{maxHeight:'none',overflow:'visible'}}
+                      />
                     )}
                   </td>
                   <td className="px-4 py-2">

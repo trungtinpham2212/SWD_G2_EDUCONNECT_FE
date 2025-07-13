@@ -48,7 +48,15 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
   function generateWeeksForSchoolYear(schoolYear) {
     if (!schoolYear?.year) return [];
     const [startYear, endYear] = schoolYear.year.split('-').map(Number);
-    const startDate = new Date(`${startYear}-09-02`); // 2/9
+    // Lấy ngày 2/9
+    let startDate = new Date(`${startYear}-09-02`);
+    // Nếu 2/9 không phải thứ 2 thì lùi về thứ 2 gần nhất trước hoặc bằng 2/9
+    const dayOfWeek = startDate.getDay(); // 0: CN, 1: T2, ...
+    if (dayOfWeek !== 1) {
+      // Lùi về thứ 2 gần nhất
+      const diff = (dayOfWeek === 0 ? 6 : dayOfWeek - 1); // Nếu là CN thì lùi 6 ngày, còn lại lùi dayOfWeek-1
+      startDate.setDate(startDate.getDate() - diff);
+    }
     const endDate = new Date(`${endYear}-05-31`); // cuối tháng 5
     const weeks = [];
     let current = new Date(startDate);
@@ -372,7 +380,7 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
       }
       
       return Number(section.classid) === Number(classId) &&
-             Number(section.period) === Number(periodNo) &&
+             Number(section.periodno || section.period) === Number(periodNo) &&
              sectionDateStr === dateStr;
     });
 
@@ -388,7 +396,7 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
       }
       
       return Number(section.teacherid) === Number(teacherId) &&
-             Number(section.period) === Number(periodNo) &&
+             Number(section.periodno || section.period) === Number(periodNo) &&
              sectionDateStr === dateStr;
     });
 

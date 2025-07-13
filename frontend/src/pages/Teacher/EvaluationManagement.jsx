@@ -82,6 +82,9 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
   const [weeks, setWeeks] = useState([]);
   const [selectedWeek, setSelectedWeek] = useState(null);
 
+  // Thêm state cho subjects
+  const [subjects, setSubjects] = useState([]);
+
   // Helper lấy token từ localStorage
   const getAuthHeaders = () => {
     const token = localStorage.getItem('token');
@@ -98,7 +101,7 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
         let page = 1;
         let totalPages = 1;
         do {
-          const url = `${API_URL}/api/evaluations/by-teacher/${user?.teacherId}?page=${page}&pageSize=5`;
+          const url = `${API_URL}/api/evaluations/by-teacher/${user?.teacherId}?page=${page}&pageSize=${ITEMS_PER_PAGE}`;
           const evalRes = await fetch(url, { headers: getAuthHeaders() });
           if (!evalRes.ok) throw new Error('API call thất bại');
           const evalData = await evalRes.json();
@@ -327,6 +330,20 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
     fetchActivities();
   }, []);
 
+  // Fetch subjects khi load trang
+  useEffect(() => {
+    const fetchSubjects = async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/subjects?page=1&pageSize=100`, { headers: getAuthHeaders() });
+        const data = await res.json();
+        setSubjects(Array.isArray(data.items) ? data.items : []);
+      } catch {
+        setSubjects([]);
+      }
+    };
+    fetchSubjects();
+  }, []);
+
   // Khi render bảng, dùng filteredAndSortedEvaluations để slice phân trang
   const totalFiltered = filteredAndSortedEvaluations.length;
   const totalFilteredPages = Math.max(1, Math.ceil(totalFiltered / pageSize));
@@ -379,6 +396,12 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
     }
     
     return `${evaluation.students.length} học sinh`;
+  };
+
+  // Helper lấy tên môn học từ subjectid
+  const getSubjectNameById = (subjectid) => {
+    const subject = subjects.find(s => String(s.subjectid) === String(subjectid));
+    return subject ? subject.subjectname : `Môn ${subjectid || '-'}`;
   };
 
   return (
@@ -466,6 +489,7 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
                       {sortField === 'perioddate' && <span className="ml-1">{sortAsc ? '▲' : '▼'}</span>}
                     </th>
                     <td className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Lớp</td>
+                    <td className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Môn dạy</td>
                     <td className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nội dung đánh giá</td>
                     <td className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Loại</td>
                     <th
@@ -482,7 +506,7 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
                   {paginatedEvaluations.map((ev, idx) => {
                     const period = ev.period || {};
                     const className = period.class?.classname || `Lớp ${period.classid || '-'}`;
-                    const subjectName = period.subject?.subjectname || `Môn ${period.subjectid || '-'}`;
+                    const subjectName = period.subject?.subjectname || getSubjectNameById(period.subjectid);
                     const periodNo = period.periodno || '-';
                     const periodDate = period.perioddate ? new Date(period.perioddate).toLocaleDateString('vi-VN') : '-';
                     return (
@@ -501,6 +525,7 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
                             return clsName || `Lớp ${cid || '-'}`;
                           })()}
                         </td>
+                        <td className="px-4 py-2 text-sm text-gray-900">{subjectName}</td>
                         <td className="px-4 py-2 text-sm text-gray-900 max-w-xs whitespace-pre-line break-words">{ev.content}</td>
                         <td className="px-4 py-2 text-sm">
                           <span className={`px-2 py-1 rounded-full text-xs font-medium ${getEvaluationType(ev) === 'negative' ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
