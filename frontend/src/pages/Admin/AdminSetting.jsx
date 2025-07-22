@@ -226,13 +226,21 @@ const AdminSetting = ({
       
       const response = await fetch(`${API_URL}/api/user-accounts/${user.userId}`, {
         method: 'PUT',
-        body: formData
+        body: formData,
+        headers: getAuthHeaders().Authorization ? { Authorization: getAuthHeaders().Authorization } : undefined
       });
       
       let text = await response.text();
       const normalized = text.replace(/"/g, '').trim();
       
       if (response.ok || normalized.toLowerCase().includes('success') || normalized.includes('Update successful')) {
+        let newAvatarUrl = '';
+        try {
+          const json = JSON.parse(text);
+          newAvatarUrl = json.avatarUrl || json.avatarurl || '';
+        } catch {}
+        setAvatarUrl(newAvatarUrl);
+        setProfileForm(prev => ({ ...prev, avatarurl: newAvatarUrl }));
         toast.success('Đổi mật khẩu thành công! Bạn sẽ được chuyển về trang đăng nhập trong 2 giây.');
         setProfileForm((prev) => ({
           ...prev,
@@ -304,6 +312,13 @@ const AdminSetting = ({
         normalized.toLowerCase().includes("success") ||
         normalized.includes("Update successful")
       ) {
+        let newAvatarUrl = '';
+        try {
+          const json = JSON.parse(text);
+          newAvatarUrl = json.avatarUrl || json.avatarurl || '';
+        } catch {}
+        setAvatarUrl(newAvatarUrl);
+        setProfileForm(prev => ({ ...prev, avatarurl: newAvatarUrl }));
         toast.success("Cập nhật thông tin cá nhân thành công!");
         setProfileForm((prev) => ({
           ...prev,
@@ -315,10 +330,10 @@ const AdminSetting = ({
         setIsEditing(false); // Tự động đóng chế độ chỉnh sửa
         setAvatarFile(null); // Reset avatar file
         setAvatarRemoved(false); // Reset avatar removed state
-        // Nếu đã xóa avatar, cập nhật state
-        if (!avatarFile && avatarUrl === '') {
-          setAvatarUrl('');
-        }
+        // Không setAvatarUrl('') ở đây nữa!
+        // Cập nhật user object trong localStorage
+        const updatedUser = { ...user, avatarUrl: newAvatarUrl };
+        localStorage.setItem('user', JSON.stringify(updatedUser));
       } else {
         toast.error("Lỗi khi cập nhật: " + normalized);
       }
@@ -513,7 +528,7 @@ const AdminSetting = ({
                     {avatarUrl ? (
                       <div className="relative flex flex-col items-center">
                         <img
-                          src={avatarUrl}
+                          src={avatarUrl || profileForm.avatarurl || user.avatarUrl || ''}
                           alt="avatar"
                           className={`w-32 h-32 rounded-full object-cover border-4 border-blue-200 shadow mb-2 transition-all ${uploading ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
                           onClick={isEditing && !uploading ? handleAvatarClick : undefined}

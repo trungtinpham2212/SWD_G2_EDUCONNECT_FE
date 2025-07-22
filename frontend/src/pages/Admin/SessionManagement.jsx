@@ -370,7 +370,7 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
           fetch(`${API_URL}/api/user-accounts`, { headers: getAuthHeaders() }),
           fetch(`${API_URL}/api/activities`, { headers: getAuthHeaders() }),
           fetch(`${API_URL}/api/school-years`, { headers: getAuthHeaders() }),
-          fetch(`${API_URL}/api/students?page=1&pageSize=400`, { headers: getAuthHeaders() })
+          fetch(`${API_URL}/api/students?page=1&pageSize=10`, { headers: getAuthHeaders() })
         ]);
 
         // Kiểm tra lỗi 401 cho tất cả response

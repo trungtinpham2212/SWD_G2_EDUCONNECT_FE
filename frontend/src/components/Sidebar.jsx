@@ -70,7 +70,7 @@ const Sidebar = ({ active, setActive, isOpen, setIsOpen, user }) => {
           const res = await fetch(`${API_URL}/api/user-accounts/${user.userId}`);
           if (res.ok) {
             const data = await res.json();
-            setAvatarUrl(data.avatarurl || null);
+            setAvatarUrl(data.avatarUrl || data.avatarurl || null);
           }
         } catch (e) {
           setAvatarUrl(null);
@@ -78,7 +78,7 @@ const Sidebar = ({ active, setActive, isOpen, setIsOpen, user }) => {
       }
     };
     fetchAvatar();
-  }, [user?.userId]);
+  }, [user?.userId, user?.avatarUrl]);
 
   const handleLogout = () => {
     localStorage.removeItem('user');

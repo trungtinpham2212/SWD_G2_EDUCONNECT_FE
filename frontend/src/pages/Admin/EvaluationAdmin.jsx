@@ -111,44 +111,40 @@ const EvaluationAdmin = () => {
     const fetchData = async () => {
       // Chỉ fetch khi đã có selectedWeek
       if (!selectedWeek) return;
-      
       try {
         setLoading(true);
         setError(null);
-        
-        // API lấy evaluations theo thời gian
-        let apiUrl = `${API_URL}/api/evaluations?page=1&pageSize=1000`;
-        if (selectedWeek) {
-          apiUrl += `&StartDate=${selectedWeek.start}&EndDate=${selectedWeek.end}`;
+        // 1. Lấy danh sách periodId của tuần
+        let periodsUrl = `${API_URL}/api/periods?startDate=${selectedWeek.start}&endDate=${selectedWeek.end}`;
+        const periodsRes = await fetch(periodsUrl, { headers: getAuthHeaders() });
+        const periodsData = await periodsRes.json();
+        const periodIds = Array.isArray(periodsData.items) ? periodsData.items.map(p => p.periodid) : [];
+        if (periodIds.length === 0) {
+          setEvaluations([]);
+          setError('nodata');
+          setLoading(false);
+          return;
         }
-        
-        const res = await fetch(apiUrl, { headers: getAuthHeaders() });
-        if (!res.ok) {
-          throw new Error('API call failed');
-        }
-        
-              const data = await res.json();
+        // 2. Lấy evaluations theo periodId
+        let evalUrl = `${API_URL}/api/evaluations?page=1&pageSize=1000`;
+        periodIds.forEach(pid => { evalUrl += `&PeriodId=${pid}`; });
+        const res = await fetch(evalUrl, { headers: getAuthHeaders() });
+        if (!res.ok) throw new Error('API call failed');
+        const data = await res.json();
         const all = Array.isArray(data.items) ? data.items : [];
-        
-        // Set evaluations - all filtering done on frontend
         setEvaluations(all.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
-        console.log('📊 Evaluations loaded:', all.length);
-        
         if (all.length === 0) {
           setError('nodata');
         } else {
           setError(null);
         }
-        
       } catch (err) {
-        console.error('🚨 fetchData error:', err);
         setEvaluations([]);
         setError('Không thể tải dữ liệu đánh giá. Vui lòng thử lại sau.');
       } finally {
         setLoading(false);
       }
     };
-    
     fetchData();
   }, [selectedWeek]);
 
@@ -177,48 +173,23 @@ const EvaluationAdmin = () => {
   // Lọc và sắp xếp evaluations với sorting thông minh
   const filteredAndSortedEvaluations = useMemo(() => {
     let filtered = [...evaluations];
-
     // Lọc theo lớp
     if (selectedClass !== 'all') {
       filtered = filtered.filter(ev => ev.className === selectedClass);
     }
-
     // Lọc theo giáo viên
-        if (selectedTeacher !== 'all') {
+    if (selectedTeacher !== 'all') {
       filtered = filtered.filter(ev => Number(ev.teacherid) === Number(selectedTeacher));
     }
-
     // Lọc theo loại đánh giá
     if (selectedActivity === 'positive') {
       filtered = filtered.filter(ev => !ev.activity?.isNegative);
     } else if (selectedActivity === 'negative') {
       filtered = filtered.filter(ev => ev.activity?.isNegative);
     }
-
-    // Sắp xếp thông minh theo: lớp học > giáo viên > loại đánh giá > thời gian
-    return filtered.sort((a, b) => {
-      // 1. Sort theo lớp học (className)
-      const classCompare = (a.className || '').localeCompare(b.className || '');
-      if (classCompare !== 0) return classCompare;
-      
-      // 2. Sort theo giáo viên (teacherName)
-      const teacherCompare = (a.teacherName || '').localeCompare(b.teacherName || '');
-      if (teacherCompare !== 0) return teacherCompare;
-      
-      // 3. Sort theo loại đánh giá (tích cực trước, tiêu cực sau)
-      const negativeA = a.activity?.isNegative ? 1 : 0;
-      const negativeB = b.activity?.isNegative ? 1 : 0;
-      const negativeCompare = negativeA - negativeB;
-      if (negativeCompare !== 0) return negativeCompare;
-      
-      // 4. Sort theo thời gian (mới nhất trước)
-      if (sortAsc) {
-        return new Date(a.createdAt) - new Date(b.createdAt);
-      } else {
-        return new Date(b.createdAt) - new Date(a.createdAt);
-      }
-    });
-  }, [evaluations, selectedClass, selectedTeacher, selectedActivity, sortAsc]);
+    // Chỉ sort theo createdAt mới nhất lên đầu
+    return filtered.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  }, [evaluations, selectedClass, selectedTeacher, selectedActivity]);
 
   // Pagination cho filtered và sorted data
   const totalFiltered = filteredAndSortedEvaluations.length;
@@ -381,13 +352,7 @@ const EvaluationAdmin = () => {
                   <tr>
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">STT</th>
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tiết</th>
-                    <th
-                      className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none"
-                      onClick={handleSortDate}
-                    >
-                      Thời gian tạo
-                      <span className="ml-1">{sortAsc ? '▲' : '▼'}</span>
-                    </th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Thời gian tạo</th>
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Lớp</th>
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giáo viên đánh giá</th>
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nội dung đánh giá</th>

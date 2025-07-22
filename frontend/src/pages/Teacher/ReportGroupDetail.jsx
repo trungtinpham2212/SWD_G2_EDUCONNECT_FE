@@ -4,7 +4,7 @@ import API_URL from '../../config/api';
 import { FaArrowLeft, FaCalendarAlt, FaFileAlt } from 'react-icons/fa';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import { getTokenFromStorage, getAuthHeaders } from '../../utils/auth';
+import { getAuthHeaders, removeToken } from '../../utils/auth';
 
 const ITEMS_PER_PAGE = 15;
 
@@ -39,40 +39,34 @@ const ReportGroupDetail = ({ user }) => {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch(`${API_URL}/api/report-students/report-group/${reportGroupId}?page=${currentPage}&pageSize=${ITEMS_PER_PAGE}`, {
-        headers: { ...getAuthHeaders() }
+      // Lấy thông tin group
+      const groupRes = await fetch(`${API_URL}/api/report-groups/${reportGroupId}`, {
+        headers: getAuthHeaders()
       });
-      if (!res.ok) throw new Error('Không tìm thấy báo cáo');
+      if (!groupRes.ok) throw new Error('Không tìm thấy báo cáo nhóm');
+      const groupData = await groupRes.json();
+      setGroup(groupData);
+      setEditTitle(groupData.title || '');
+      setEditContent(groupData.content || '');
+      setOriginalTitle(groupData.title || '');
+      setOriginalContent(groupData.content || '');
+
+      // Lấy danh sách student reports
+      const res = await fetch(`${API_URL}/api/report-students?reportGroupId=${reportGroupId}&page=${currentPage}&pageSize=${ITEMS_PER_PAGE}`, {
+        headers: getAuthHeaders()
+      });
+      if (!res.ok) throw new Error('Không tìm thấy báo cáo học sinh');
       const data = await res.json();
-      if (data.items && data.items.length > 0) {
-        setGroup(data.items[0].reportgroup || null);
-        setStudentReports(data.items);
-        setTotalCount(data.totalCount || 0);
-        setTotalPages(data.totalPages || 1);
-        setEditTitle(data.items[0].reportgroup?.title || '');
-        setEditContent(data.items[0].reportgroup?.content || '');
-        const reportStudentsArr = data.items.map(item => ({
-          reportStudentId: item.reportstudentid,
-          studentId: item.student?.studentid || item.studentid,
-          content: item.content
-        }));
-        setEditReportStudents(reportStudentsArr);
-        // Lưu giá trị gốc để so sánh thay đổi
-        setOriginalTitle(data.items[0].reportgroup?.title || '');
-        setOriginalContent(data.items[0].reportgroup?.content || '');
-        setOriginalReportStudents(reportStudentsArr);
-      } else {
-        setGroup(null);
-        setStudentReports([]);
-        setTotalCount(0);
-        setTotalPages(1);
-        setEditTitle('');
-        setEditContent('');
-        setEditReportStudents([]);
-        setOriginalTitle('');
-        setOriginalContent('');
-        setOriginalReportStudents([]);
-      }
+      setStudentReports(data.items || []);
+      setTotalCount(data.totalCount || 0);
+      setTotalPages(data.totalPages || 1);
+      const reportStudentsArr = (data.items || []).map(item => ({
+        reportStudentId: item.reportstudentid,
+        studentId: item.student?.studentid || item.studentid,
+        content: item.content
+      }));
+      setEditReportStudents(reportStudentsArr);
+      setOriginalReportStudents(reportStudentsArr);
     } catch (err) {
       setError(err.message || 'Lỗi không xác định');
     } finally {

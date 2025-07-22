@@ -3,6 +3,7 @@ import API_URL from '../../config/api';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { FaSave, FaCloudUploadAlt, FaEye, FaEyeSlash, FaEdit } from 'react-icons/fa';
+import { getAuthHeaders, removeToken } from '../../utils/auth';
 
 const TeacherSetting = ({ user }) => {
   const [avatarUrl, setAvatarUrl] = useState('');
@@ -37,7 +38,7 @@ const TeacherSetting = ({ user }) => {
     const fetchProfile = async () => {
       setLoadingProfile(true);
       try {
-        const res = await fetch(`${API_URL}/api/user-accounts/${user.userId}`);
+        const res = await fetch(`${API_URL}/api/user-accounts/${user.userId}`, { headers: getAuthHeaders() });
         const data = await res.json();
         setProfileForm({
           currentPassword: '',
@@ -50,9 +51,12 @@ const TeacherSetting = ({ user }) => {
           username: data.username,
           avatarurl: data.avatarurl || ''
         });
-        setAvatarUrl(data.avatarurl || '');
+        // Lấy avatarUrl giống Sidebar
+        setAvatarUrl(data.avatarUrl || data.avatarurl || '');
         setAvatarRemoved(false);
       } catch (err) {
+        // Nếu lỗi, fallback sang local
+        setAvatarUrl(profileForm.avatarurl || user.avatarUrl || '');
         toast.error('Không lấy được thông tin cá nhân');
       } finally {
         setLoadingProfile(false);
@@ -114,20 +118,28 @@ const TeacherSetting = ({ user }) => {
       formData.append('password', '');
       const response = await fetch(`${API_URL}/api/user-accounts/${user.userId}`, {
         method: 'PUT',
-        body: formData
+        body: formData,
+        headers: getAuthHeaders().Authorization ? { Authorization: getAuthHeaders().Authorization } : undefined
       });
       let text = await response.text();
       const normalized = text.replace(/"/g, '').trim();
       if (response.ok || normalized.toLowerCase().includes('success') || normalized.includes('Update successful')) {
+        let newAvatarUrl = '';
+        try {
+          const json = JSON.parse(text);
+          newAvatarUrl = json.avatarUrl || json.avatarurl || '';
+        } catch {}
+        setAvatarUrl(newAvatarUrl);
+        setProfileForm(prev => ({ ...prev, avatarurl: newAvatarUrl }));
+        // Cập nhật user object trong localStorage
+        const updatedUser = { ...user, avatarUrl: newAvatarUrl };
+        localStorage.setItem('user', JSON.stringify(updatedUser));
         toast.success('Cập nhật thông tin cá nhân thành công!');
         setProfileForm(prev => ({ ...prev, currentPassword: '', password: '', confirmPassword: '' }));
         setShowChangePasswordModal(false);
         setIsEditing(false);
         setAvatarFile(null);
         setAvatarRemoved(false);
-        if (!avatarFile && avatarUrl === '') {
-          setAvatarUrl('');
-        }
       } else {
         toast.error('Lỗi khi cập nhật: ' + normalized);
       }
@@ -211,6 +223,7 @@ const TeacherSetting = ({ user }) => {
       const response = await fetch(`${API_URL}/api/user-accounts/${user.userId}`, {
         method: 'PUT',
         body: formData
+        // KHÔNG set headers Content-Type ở đây!
       });
       
       let text = await response.text();
@@ -280,15 +293,12 @@ const TeacherSetting = ({ user }) => {
                   {avatarUrl ? (
                     <div className="relative flex flex-col items-center">
                       <img
-                        src={avatarUrl}
+                        src={avatarUrl || profileForm.avatarurl || user.avatarUrl || ''}
                         alt="avatar"
                         className={`w-32 h-32 rounded-full object-cover border-4 border-blue-200 shadow mb-2 transition-all ${uploading ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
                         onClick={isEditing && !uploading ? handleAvatarClick : undefined}
                         style={{ pointerEvents: isEditing && !uploading ? 'auto' : 'none' }}
                       />
-                      {isEditing && !uploading && (
-                        <span className="text-md text-black-100 mt-1">Bấm vào để đổi ảnh đại diện</span>
-                      )}
                     </div>
                   ) : (
                     <div
@@ -310,6 +320,9 @@ const TeacherSetting = ({ user }) => {
                     disabled={uploading || !isEditing}
                   />
                 </div>
+                {isEditing && !uploading && (
+                  <span className="text-md text-black-100 mt-2 block text-center">Bấm vào để đổi ảnh đại diện</span>
+                )}
               </div>
               {/* Thông tin bên phải */}
               <div className="flex-1">

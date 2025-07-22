@@ -4,6 +4,8 @@ import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { getTokenFromStorage, getAuthHeaders } from '../../utils/auth';
 
+const ITEMS_PER_PAGE = 22;
+
 const ClassManagement = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) => {
   const [classes, setClasses] = useState([]);
   const [teachers, setTeachers] = useState([]);
@@ -38,7 +40,7 @@ const ClassManagement = ({ user, active, setActive, isSidebarOpen, setSidebarOpe
         fetch(`${API_URL}/api/teachers?page=1&pageSize=10`, { headers: getAuthHeaders() }),
         fetch(`${API_URL}/api/user-accounts`, { headers: getAuthHeaders() }),
         fetch(`${API_URL}/api/school-years`, { headers: getAuthHeaders() }),
-        fetch(`${API_URL}/api/students?page=1&pageSize=400`, { headers: getAuthHeaders() })
+        fetch(`${API_URL}/api/students?page=1&pageSize=${ITEMS_PER_PAGE}`, { headers: getAuthHeaders() })
         // 1 trang 10 lớp, mỗi lớp 40 học sinh
       ]);
       const classDataRaw = await classRes.json();

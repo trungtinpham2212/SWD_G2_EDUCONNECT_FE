@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import API_URL from '../../config/api';
+import { getAuthHeaders, removeToken } from '../../utils/auth';
 
 const ParentDashboard = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) => {
   const [children, setChildren] = useState([]);
@@ -31,7 +32,7 @@ const ParentDashboard = ({ user, active, setActive, isSidebarOpen, setSidebarOpe
       const fetchParentDetails = async () => {
         try {
           setLoading(true);
-          const res = await fetch(`${API_URL}/api/user-accounts/${loggedInUser.userId}`);
+          const res = await fetch(`${API_URL}/api/user-accounts/${loggedInUser.userId}`, { headers: getAuthHeaders() });
           if (!res.ok) {
             throw new Error('Không thể tải thông tin phụ huynh');
           }
@@ -72,7 +73,7 @@ const ParentDashboard = ({ user, active, setActive, isSidebarOpen, setSidebarOpe
         let page = 1;
         let totalPages = 1;
         do {
-          const periodRes = await fetch(`${API_URL}/api/periods?page=${page}&pageSize=50`);
+          const periodRes = await fetch(`${API_URL}/api/periods?page=${page}&pageSize=50`, { headers: getAuthHeaders() });
           if (!periodRes.ok) throw new Error('Không thể tải periods');
           const periodsRaw = await periodRes.json();
           const items = Array.isArray(periodsRaw.items) ? periodsRaw.items : [];
@@ -82,8 +83,8 @@ const ParentDashboard = ({ user, active, setActive, isSidebarOpen, setSidebarOpe
         } while (page <= totalPages);
         // Lấy subjects và classes (1 trang là đủ)
         const [subjectRes, classRes] = await Promise.all([
-          fetch(`${API_URL}/api/subjects?page=1&pageSize=100`),
-          fetch(`${API_URL}/api/classes?page=1&pageSize=100`)
+          fetch(`${API_URL}/api/subjects?page=1&pageSize=100`, { headers: getAuthHeaders() }),
+          fetch(`${API_URL}/api/classes?page=1&pageSize=100`, { headers: getAuthHeaders() })
         ]);
         if (!subjectRes.ok || !classRes.ok) throw new Error('Không thể tải subjects/classes');
         const subjectsData = await subjectRes.json();

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { FaCalendarAlt, FaChevronLeft, FaChevronRight } from 'react-icons/fa';
 import API_URL from '../../config/api';
 import { useNavigate } from 'react-router-dom';
-import { getTokenFromStorage, getAuthHeaders } from '../../utils/auth';
+import { getAuthHeaders, removeToken } from '../../utils/auth';
 
 const Schedule = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) => {
   const [periods, setperiods] = useState([]);
@@ -137,7 +137,8 @@ const Schedule = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) =>
       try {
         setLoading(true);
         if (!teacherId || !selectedWeek) return;
-        const url = `${API_URL}/api/periods/by-range?startDate=${toMMDDYYYY(selectedWeek.start)}&endDate=${toMMDDYYYY(selectedWeek.end)}&teacherId=${teacherId}&page=1&pageSize=50`;
+        // SỬA: dùng endpoint mới
+        const url = `${API_URL}/api/periods?teacherId=${teacherId}&startDate=${selectedWeek.start}&endDate=${selectedWeek.end}&page=1&pageSize=50`;
         const response = await fetch(url, {
           headers: { ...getAuthHeaders() }
         });

@@ -3,7 +3,7 @@ import API_URL from '../../config/api';
 import { FaSearch, FaEye, FaCalendarAlt, FaFileAlt, FaPlus, FaUserGraduate } from 'react-icons/fa';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
-import { getTokenFromStorage, getAuthHeaders } from '../../utils/auth';
+import { getAuthHeaders, removeToken } from '../../utils/auth';
 
 const ITEMS_PER_PAGE = 9;
 
@@ -24,6 +24,7 @@ const ReportManagement = ({ user }) => {
   const [totalCount, setTotalCount] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [currentPage, setCurrentPage] = useState(1);
+  const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'sent' | 'draft'
 
   useEffect(() => {
     const fetchGroups = async () => {
@@ -31,12 +32,25 @@ const ReportManagement = ({ user }) => {
       setError('');
       try {
         const teacherId = user?.teacherId || localStorage.getItem('teacherId');
-        const res = await fetch(`${API_URL}/api/report-groups/by-teacher/${teacherId}?page=${currentPage}&pageSize=${ITEMS_PER_PAGE}`, {
+        let url = `${API_URL}/api/report-groups?teacherId=${teacherId}&page=${currentPage}&pageSize=${ITEMS_PER_PAGE}&sortBy=createdAt&sortOrder=desc`;
+        if (statusFilter === 'sent') url += `&status=Sent`;
+        if (statusFilter === 'draft') url += `&status=Draft`;
+        const res = await fetch(url, {
           headers: { ...getAuthHeaders() }
         });
         if (!res.ok) throw new Error('Không thể tải danh sách báo cáo');
         const data = await res.json();
-        setReportGroups(data.items || []);
+        // Sort: chưa gửi lên đầu, đã gửi xuống dưới, trong mỗi nhóm sort theo createdAt giảm dần
+        const sortedItems = (data.items || []).slice().sort((a, b) => {
+          const isSentA = a.status && (a.status.toLowerCase() === 'sent' || a.status.toLowerCase() === 'hoàn thành');
+          const isSentB = b.status && (b.status.toLowerCase() === 'sent' || b.status.toLowerCase() === 'hoàn thành');
+          if (isSentA !== isSentB) return isSentA ? 1 : -1; // chưa gửi lên đầu
+          // Nếu cùng nhóm, sort theo createdAt giảm dần
+          const dateA = new Date(a.createdat || a.createdAt || 0).getTime();
+          const dateB = new Date(b.createdat || b.createdAt || 0).getTime();
+          return dateB - dateA;
+        });
+        setReportGroups(sortedItems);
         setTotalCount(data.totalCount || 0);
         setTotalPages(data.totalPages || 1);
       } catch (err) {
@@ -59,11 +73,13 @@ const ReportManagement = ({ user }) => {
         const foundClass = classData.find(cls => cls.teacherhomeroomid === user.teacherId);
         setHomeroomClass(foundClass || null);
         if (foundClass) {
-          // Lấy học sinh theo classid
-          const studentRes = await fetch(`${API_URL}/api/students/by-class/${foundClass.classid}`, {
+          // SỬA: dùng endpoint mới
+          const studentRes = await fetch(`${API_URL}/api/students?classId=${foundClass.classid}`, {
             headers: { ...getAuthHeaders() }
           });
-          const studentData = await studentRes.json();
+          const studentDataRaw = await studentRes.json();
+          // Đáp ứng chuẩn swagger: trả về { items: [...] }
+          const studentData = Array.isArray(studentDataRaw.items) ? studentDataRaw.items : studentDataRaw;
           setStudents(Array.isArray(studentData) ? studentData : []);
         } else {
           setStudents([]);
@@ -73,7 +89,7 @@ const ReportManagement = ({ user }) => {
       }
     };
     fetchHomeroom();
-  }, [user, currentPage]);
+  }, [user, currentPage, statusFilter]);
 
   const formatDate = (dateStr) => {
     if (!dateStr) return '';
@@ -129,11 +145,18 @@ const ReportManagement = ({ user }) => {
       setEndDate(dayjs().format('YYYY-MM-DD'));
       // Reload group list
       const teacherId = user?.teacherId || localStorage.getItem('teacherId');
-      const reload = await fetch(`${API_URL}/api/report-groups/by-teacher/${teacherId}?page=1&pageSize=10`, {
+      // SỬA: dùng endpoint mới, thêm sortBy và sortOrder để mới nhất lên đầu
+      const reload = await fetch(`${API_URL}/api/report-groups?teacherId=${teacherId}&page=1&pageSize=10&sortBy=createdAt&sortOrder=desc`, {
         headers: { ...getAuthHeaders() }
       });
       const reloadData = await reload.json();
-      setReportGroups(reloadData.items || []);
+      // Sort lại chỉ theo createdAt khi reload
+      const sortedReload = (reloadData.items || []).slice().sort((a, b) => {
+        const dateA = new Date(a.createdat || a.createdAt || 0).getTime();
+        const dateB = new Date(b.createdat || b.createdAt || 0).getTime();
+        return dateB - dateA;
+      });
+      setReportGroups(sortedReload);
       setTotalCount(reloadData.totalCount || 0);
       setTotalPages(reloadData.totalPages || 1);
     } catch (e) {
@@ -165,6 +188,19 @@ const ReportManagement = ({ user }) => {
             className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
+        {/* Dropdown lọc trạng thái */}
+        <select
+          className="px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          value={statusFilter}
+          onChange={e => {
+            setStatusFilter(e.target.value);
+            setCurrentPage(1); // reset về trang 1 khi đổi filter
+          }}
+        >
+          <option value="all">Tất cả</option>
+          <option value="sent">Đã gửi</option>
+          <option value="draft">Nháp</option>
+        </select>
         <button
           className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
           onClick={openCreateModal}

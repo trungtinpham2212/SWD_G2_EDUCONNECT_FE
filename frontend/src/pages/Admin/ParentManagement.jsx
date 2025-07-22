@@ -36,8 +36,8 @@ const ParentManagement = ({ user, active, setActive, isSidebarOpen, setSidebarOp
       setLoading(true);
       const [userRes, studentRes, classRes] = await Promise.all([
         fetch(`${API_URL}/api/user-accounts`, { headers: getAuthHeaders() }),
-        fetch(`${API_URL}/api/students?page=1&pageSize=100`, { headers: getAuthHeaders() }),
-        fetch(`${API_URL}/api/classes?page=1&pageSize=10`, { headers: getAuthHeaders() })
+        fetch(`${API_URL}/api/students?page=1&pageSize=${ITEMS_PER_PAGE}`, { headers: getAuthHeaders() }),
+        fetch(`${API_URL}/api/classes?page=1&pageSize=${ITEMS_PER_PAGE}`, { headers: getAuthHeaders() })
       ]);
       const userData = await userRes.json();
       const studentData = await studentRes.json();

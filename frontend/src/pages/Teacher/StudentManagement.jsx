@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { FaSearch, FaUserGraduate, FaBirthdayCake, FaUserFriends } from 'react-icons/fa';
 import API_URL from '../../config/api';
-import { getTokenFromStorage, getAuthHeaders } from '../../utils/auth';
-
+import { getTokenFromStorage, getAuthHeaders, removeToken } from '../../utils/auth';
 
 
 const StudentManagement = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) => {
@@ -21,25 +20,47 @@ const StudentManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
     const fetchData = async () => {
       try {
         setLoading(true);
-        // Fetch danh sách lớp để xác định lớp chủ nhiệm
-        const classRes = await fetch(`${API_URL}/api/classes?page=1&pageSize=100`, { headers: { ...getAuthHeaders() } });
+        // Lấy đúng lớp mà giáo viên này là chủ nhiệm
+        const classRes = await fetch(`${API_URL}/api/classes?page=1&pageSize=100`, { headers: getAuthHeaders() });
+        if (classRes.status === 401 || classRes.status === 403) {
+          removeToken();
+          setError('Phiên đăng nhập đã hết hạn hoặc không đủ quyền. Vui lòng đăng nhập lại.');
+          setLoading(false);
+          return;
+        }
         const classData = await classRes.json();
-        const foundClass = classData.items ? classData.items.find(cls => cls.teacherhomeroomid === user.teacherId) : classData.find(cls => cls.teacherhomeroomid === user.teacherId);
+        // Tìm lớp mà giáo viên này là chủ nhiệm
+        const foundClass = Array.isArray(classData.items)
+          ? classData.items.find(cls => cls.teacherhomeroomid === user.teacherId)
+          : null;
         setHomeroomClass(foundClass || null);
         if (foundClass) {
-          // Fetch học sinh bằng API by-class
-          const studentRes = await fetch(`${API_URL}/api/students/by-class/${foundClass.classid}`, { headers: { ...getAuthHeaders() } });
+          // Lấy học sinh của lớp này
+          const studentRes = await fetch(`${API_URL}/api/students?teacherId=${user.teacherId}`, { headers: getAuthHeaders() });
+          if (studentRes.status === 401 || studentRes.status === 403) {
+            removeToken();
+            setError('Phiên đăng nhập đã hết hạn hoặc không đủ quyền. Vui lòng đăng nhập lại.');
+            setLoading(false);
+            return;
+          }
           const studentData = await studentRes.json();
-          setStudents(studentData.items || studentData || []);
-          setTotalCount((studentData.items || studentData || []).length);
+          setStudents(Array.isArray(studentData.items) ? studentData.items : (Array.isArray(studentData) ? studentData : []));
+          setTotalCount(Array.isArray(studentData.items) ? studentData.items.length : (Array.isArray(studentData) ? studentData.length : 0));
           setTotalPages(1);
         } else {
           setStudents([]);
           setTotalCount(0);
           setTotalPages(1);
+          setError('Bạn chưa được phân công làm giáo viên chủ nhiệm lớp nào.');
         }
-        // Fetch all parent accounts
-        const parentRes = await fetch(`${API_URL}/api/user-accounts`, { ...getAuthHeaders() });
+        // Lấy danh sách phụ huynh
+        const parentRes = await fetch(`${API_URL}/api/user-accounts`, { headers: getAuthHeaders() });
+        if (parentRes.status === 401 || parentRes.status === 403) {
+          removeToken();
+          setError('Phiên đăng nhập đã hết hạn hoặc không đủ quyền. Vui lòng đăng nhập lại.');
+          setLoading(false);
+          return;
+        }
         const parentData = await parentRes.json();
         setParentAccounts(parentData);
         setError(null);

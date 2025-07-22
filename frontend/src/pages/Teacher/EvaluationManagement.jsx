@@ -3,7 +3,7 @@ import API_URL from '../../config/api';
 import { useLocation } from 'react-router-dom';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import { getTokenFromStorage, getAuthHeaders } from '../../utils/auth';
+import { getTokenFromStorage, getAuthHeaders, removeToken } from '../../utils/auth';
 
 const ITEMS_PER_PAGE = 10;
 
@@ -70,11 +70,8 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
   const [pageSize, setPageSize] = useState(ITEMS_PER_PAGE);
 
   // Thêm state cho filter
-  const [selectedClass, setSelectedClass] = useState('all');
-  const [selectedType, setSelectedType] = useState('all'); // 'all', 'positive', 'negative'
   const [selectedDate, setSelectedDate] = useState(''); // Thêm filter ngày
 
-  const [classStudentCounts, setClassStudentCounts] = useState({});
   const [allClasses, setAllClasses] = useState([]); // lưu toàn bộ thông tin lớp
 
   // Thêm state cho filter và tuần/năm học
@@ -86,30 +83,39 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
   // Thêm state cho subjects
   const [subjects, setSubjects] = useState([]);
 
+  const [periodDates, setPeriodDates] = useState({}); // { [periodId]: perioddate }
+
+  // Thêm lại khai báo state cho sĩ số lớp
+  const [classStudentCounts, setClassStudentCounts] = useState({});
 
 
-  // Fetch tất cả evaluations của giáo viên khi user?.teacherId thay đổi
+  // Fetch evaluations từ API, truyền sortBy, sortOrder, page, pageSize
   useEffect(() => {
-    const fetchAllEvaluations = async () => {
+    const fetchEvaluations = async () => {
       try {
         setLoading(true);
         setError(null);
-        let all = [];
-        let page = 1;
-        let totalPages = 1;
-        do {
-          const url = `${API_URL}/api/evaluations/by-teacher/${user?.teacherId}?page=${page}&pageSize=${ITEMS_PER_PAGE}`;
-          const evalRes = await fetch(url, { headers: getAuthHeaders() });
-          if (!evalRes.ok) throw new Error('API call thất bại');
-          const evalData = await evalRes.json();
-          if (Array.isArray(evalData.items)) all = all.concat(evalData.items);
-          totalPages = evalData.totalPages || 1;
-          page++;
-        } while (page <= totalPages);
-        setEvaluations(all);
-        setTotalCount(all.length);
-        setTotalPages(1); // phân trang client
-        setPageSize(ITEMS_PER_PAGE);
+        let periodIds = [];
+        if (selectedWeek) {
+          // Lấy danh sách periodId của tuần
+          const periodsUrl = `${API_URL}/api/periods?startDate=${selectedWeek.start}&endDate=${selectedWeek.end}`;
+          const periodsRes = await fetch(periodsUrl, { headers: getAuthHeaders() });
+          const periodsData = await periodsRes.json();
+          periodIds = Array.isArray(periodsData.items) ? periodsData.items.map(p => p.periodid) : [];
+        }
+        let url = `${API_URL}/api/evaluations?teacherId=${user?.teacherId}`;
+        url += `&page=${currentPage}&pageSize=${pageSize}`;
+        url += `&sortBy=${sortField}`;
+        url += `&sortOrder=${sortAsc ? 'asc' : 'desc'}`;
+        if (periodIds.length > 0) {
+          periodIds.forEach(pid => { url += `&PeriodId=${pid}`; });
+        }
+        const evalRes = await fetch(url, { headers: getAuthHeaders() });
+        if (!evalRes.ok) throw new Error('API call thất bại');
+        const evalData = await evalRes.json();
+        setEvaluations(Array.isArray(evalData.items) ? evalData.items : []);
+        setTotalCount(evalData.totalCount || 0);
+        setTotalPages(evalData.totalPages || 1);
         setError(null);
       } catch (err) {
         setError('Không thể tải dữ liệu đánh giá. Vui lòng thử lại sau.');
@@ -118,71 +124,12 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
         setLoading(false);
       }
     };
-    if (user?.teacherId) fetchAllEvaluations();
-  }, [user?.teacherId]);
-
-  // Khi đổi tuần/năm học, lọc evaluations trên client
-  const evaluationsInWeek = useMemo(() => {
-    if (!selectedWeek) return evaluations;
-    const start = new Date(selectedWeek.start);
-    const end = new Date(selectedWeek.end);
-    return evaluations.filter(ev => {
-      const periodDate = ev.period?.perioddate ? new Date(ev.period.perioddate) : null;
-      return periodDate && periodDate >= start && periodDate <= end;
-    });
-  }, [evaluations, selectedWeek]);
-
-  // Dropdown lớp lấy từ evaluationsInWeek
-  const classOptions = useMemo(() => {
-    const map = new Map();
-    evaluationsInWeek.forEach(ev => {
-      const cid = ev.period?.classid;
-      let cname = ev.period?.class?.classname;
-      if (!cname && allClasses.length > 0 && cid) {
-        const found = allClasses.find(c => c.classid === cid);
-        cname = found ? found.classname : `Lớp ${cid}`;
-      }
-      if (cid && !map.has(cid)) map.set(cid, cname || `Lớp ${cid}`);
-    });
-    return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
-  }, [evaluationsInWeek, allClasses]);
-
-  // Lọc evaluations theo lớp và loại đánh giá trên evaluationsInWeek
-  const filteredEvaluations = useMemo(() => {
-    let filtered = [...evaluationsInWeek];
-    if (selectedClass !== 'all') {
-      filtered = filtered.filter(ev => String(ev.period?.classid) === String(selectedClass));
-    }
-    if (selectedType !== 'all') {
-      filtered = filtered.filter(ev => {
-        const activity = activities.find(act => act.activityid === ev.activityid);
-        if (!activity) return false;
-        return selectedType === 'negative' ? activity.isnegative : !activity.isnegative;
-      });
-    }
-    return filtered;
-  }, [evaluationsInWeek, selectedClass, selectedType, activities]);
+    if (user?.teacherId) fetchEvaluations();
+  }, [user?.teacherId, currentPage, pageSize, sortField, sortAsc, selectedWeek]);
 
   // Lọc và sắp xếp evaluations
   const filteredAndSortedEvaluations = useMemo(() => {
     let filtered = [...evaluations];
-
-    // Lọc theo lớp
-    if (selectedClass !== 'all') {
-      filtered = filtered.filter(ev => {
-        const section = sections.find(s => s.periodid === ev.periodid);
-        return section && Number(section.classid) === Number(selectedClass);
-      });
-    }
-
-    // Lọc theo loại đánh giá dựa trên activity.isnegative
-    if (selectedType !== 'all') {
-      filtered = filtered.filter(ev => {
-        const activity = activities.find(act => act.activityid === ev.activityid);
-        if (!activity) return false;
-        return selectedType === 'negative' ? activity.isnegative : !activity.isnegative;
-      });
-    }
 
     // Lọc theo ngày
     if (selectedDate) {
@@ -209,7 +156,7 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
       }
       return sortAsc ? dateA - dateB : dateB - dateA;
     });
-  }, [evaluations, sections, selectedClass, selectedType, selectedDate, activities, sortField, sortAsc]);
+  }, [evaluations, sections, selectedDate, sortField, sortAsc]);
 
   const handleSort = (field) => {
     if (sortField === field) {
@@ -227,7 +174,13 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
 
   // Thêm hàm helper để lấy loại đánh giá
   const getEvaluationType = (evaluation) => {
-    const activity = activities.find(act => act.activityid === evaluation.activityid);
+    // Ưu tiên lấy từ evaluation.activity.isNegative
+    if (evaluation.activity && typeof evaluation.activity === 'object' && typeof evaluation.activity.isNegative === 'boolean') {
+      return evaluation.activity.isNegative ? 'negative' : 'positive';
+    }
+    // Fallback: tìm trong activities
+    const aid = evaluation.activityid || evaluation.activityId;
+    const activity = activities.find(act => act.activityid === aid || act.activityId === aid);
     return activity?.isnegative ? 'negative' : 'positive';
   };
 
@@ -252,7 +205,7 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
 
     // Lấy unique classid từ evaluations
     const classIds = Array.from(new Set(
-      evaluations.map(ev => ev.period?.classid).filter(Boolean)
+      evaluations.map(ev => ev.period?.classid || ev.classid).filter(Boolean)
     ));
 
     // Fetch sĩ số từng lớp
@@ -260,9 +213,10 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
       const counts = {};
       await Promise.all(classIds.map(async (cid) => {
         try {
-          const res = await fetch(`${API_URL}/api/students/by-class/${cid}`, { headers: getAuthHeaders() });
+          const res = await fetch(`${API_URL}/api/students?classId=${cid}`, { headers: getAuthHeaders() });
           const data = await res.json();
-          counts[cid] = Array.isArray(data) ? data.length : 0;
+          const students = Array.isArray(data.items) ? data.items : data;
+          counts[cid] = Array.isArray(students) ? students.length : 0;
         } catch {
           counts[cid] = 0;
         }
@@ -341,13 +295,35 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
     fetchSubjects();
   }, []);
 
-  // Khi render bảng, dùng filteredAndSortedEvaluations để slice phân trang
-  const totalFiltered = filteredAndSortedEvaluations.length;
-  const totalFilteredPages = Math.max(1, Math.ceil(totalFiltered / pageSize));
-  const paginatedEvaluations = filteredAndSortedEvaluations.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  // Khi render bảng, dùng evaluations trả về từ API
+  const paginatedEvaluations = filteredAndSortedEvaluations;
 
   // Khi đổi filter, reset về trang 1
-  useEffect(() => { setCurrentPage(1); }, [selectedClass, selectedType, selectedWeek, selectedSchoolYear]);
+  useEffect(() => { setCurrentPage(1); }, [selectedDate, selectedWeek, selectedSchoolYear]);
+
+  // Fetch perioddate nếu thiếu
+  useEffect(() => {
+    const fetchMissingPeriodDates = async () => {
+      const missing = paginatedEvaluations
+        .filter(ev => !ev.periodDate && (ev.periodid || ev.periodId) && !periodDates[ev.periodid || ev.periodId])
+        .map(ev => ev.periodid || ev.periodId);
+      if (missing.length === 0) return;
+      const updates = {};
+      await Promise.all(missing.map(async (pid) => {
+        try {
+          const res = await fetch(`${API_URL}/api/periods/${pid}`, { headers: getAuthHeaders() });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.perioddate) updates[pid] = data.perioddate;
+          }
+        } catch {}
+      }));
+      if (Object.keys(updates).length > 0) {
+        setPeriodDates(prev => ({ ...prev, ...updates }));
+      }
+    };
+    fetchMissingPeriodDates();
+  }, [paginatedEvaluations]);
 
   const getSectionInfo = (periodid) => sections.find(sec => Number(sec.periodid) === Number(periodid));
   const getClassName = (classid) => {
@@ -432,34 +408,7 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
             ))}
           </select>
         </div>
-        {/* Filter lớp và loại đánh giá */}
-        <div className="mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Lớp:</label>
-            <select
-              value={selectedClass}
-              onChange={(e) => setSelectedClass(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="all">Tất cả các lớp</option>
-              {classOptions.map(cls => (
-                <option key={cls.id} value={cls.id}>{cls.name}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Loại đánh giá:</label>
-            <select
-              value={selectedType}
-              onChange={(e) => setSelectedType(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="all">Tất cả</option>
-              <option value="positive">Tích cực</option>
-              <option value="negative">Tiêu cực</option>
-            </select>
-          </div>
-        </div>
+        {/* Không còn filter lớp và loại đánh giá, chỉ filter tuần */}
 
         {loading ? (
           <div className="text-center py-8">
@@ -489,39 +438,32 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
                     <td className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Môn dạy</td>
                     <td className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nội dung đánh giá</td>
                     <td className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Loại</td>
-                    <th
-                      className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none hover:bg-gray-100"
-                      onClick={() => handleSort('createdat')}
-                    >
-                      Giờ tạo
-                      {sortField === 'createdat' && <span className="ml-1">{sortAsc ? '▲' : '▼'}</span>}
-                    </th>
+                    <td className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giờ tạo</td>
                     <td className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Học sinh</td>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {paginatedEvaluations.map((ev, idx) => {
-                    const period = ev.period || {};
-                    const className = period.class?.classname || `Lớp ${period.classid || '-'}`;
-                    const subjectName = period.subject?.subjectname || getSubjectNameById(period.subjectid);
-                    const periodNo = period.periodno || '-';
-                    const periodDate = period.perioddate ? new Date(period.perioddate).toLocaleDateString('vi-VN') : '-';
+                    // Ưu tiên lấy trực tiếp từ evaluation, fallback sang period nếu không có
+                    const periodNo = ev.periodNo || ev.periodno || ev.period?.periodno || '-';
+                    let periodDate = '-';
+                    const pid = ev.periodid || ev.periodId;
+                    if (ev.periodDate) {
+                      periodDate = new Date(ev.periodDate).toLocaleDateString('vi-VN');
+                    } else if (ev.period?.perioddate) {
+                      periodDate = new Date(ev.period.perioddate).toLocaleDateString('vi-VN');
+                    } else if (pid && periodDates[pid]) {
+                      periodDate = new Date(periodDates[pid]).toLocaleDateString('vi-VN');
+                    }
+                    const className = ev.className || ev.classname || ev.period?.class?.classname || `Lớp ${ev.period?.classid || ev.classid || '-'}`;
+                    const subjectName = ev.subjectName || ev.subjectname || ev.period?.subject?.subjectname || getSubjectNameById(ev.period?.subjectid);
+                    const createdAt = ev.createdAt || ev.createdat || '-';
                     return (
-                      <tr key={ev.evaluationid}>
+                      <tr key={ev.evaluationid || ev.evaluationId}>
                         <td className="px-4 py-2 text-sm text-gray-500">{(currentPage - 1) * ITEMS_PER_PAGE + idx + 1}</td>
                         <td className="px-4 py-2 text-sm text-gray-900">{periodNo}</td>
                         <td className="px-4 py-2 text-sm text-gray-900">{periodDate}</td>
-                        <td className="px-4 py-2 text-sm text-gray-900">
-                          {(() => {
-                            const cid = ev.period?.classid;
-                            let clsName = ev.period?.class?.classname;
-                            if (!clsName && allClasses.length > 0 && cid) {
-                              const found = allClasses.find(c => c.classid === cid);
-                              clsName = found ? found.classname : `Lớp ${cid || '-'}`;
-                            }
-                            return clsName || `Lớp ${cid || '-'}`;
-                          })()}
-                        </td>
+                        <td className="px-4 py-2 text-sm text-gray-900">{className}</td>
                         <td className="px-4 py-2 text-sm text-gray-900">{subjectName}</td>
                         <td className="px-4 py-2 text-sm text-gray-900 max-w-xs whitespace-pre-line break-words">{ev.content}</td>
                         <td className="px-4 py-2 text-sm">
@@ -529,11 +471,11 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
                             {getEvaluationType(ev) === 'negative' ? 'Tiêu cực' : 'Tích cực'}
                           </span>
                         </td>
-                        <td className="px-4 py-2 text-sm text-gray-900">{getDateTime(ev.createdat)}</td>
+                        <td className="px-4 py-2 text-sm text-gray-900">{getDateTime(createdAt)}</td>
                         <td className="px-4 py-2 text-sm text-gray-900">
                           {ev.students && ev.students.length > 0 ? (
                             <button className="px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600" onClick={() => handleShowStudents(ev)}>
-                              {ev.students.length === classStudentCounts[ev.period?.classid]
+                              {ev.students.length === classStudentCounts[ev.period?.classid || ev.classid]
                                 ? 'Xem cả lớp'
                                 : `Xem ${ev.students.length} học sinh`}
                             </button>
@@ -549,7 +491,7 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
             </div>
             <div className="flex justify-between items-center mt-6">
               <div className="text-sm text-gray-500">
-                Hiển thị {totalCount} / {totalCount} đánh giá
+                Hiển thị {evaluations.length} / {totalCount} đánh giá
               </div>
               <div className="flex items-center gap-2">
                 <button
@@ -605,7 +547,9 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
                         <td className="px-4 py-2 text-sm text-gray-500">{idx + 1}</td>
                         <td className="px-4 py-2 text-sm font-medium text-gray-900">{student.name}</td>
                         <td className="px-4 py-2 text-sm text-gray-900">
-                          {student.dateofbirth ? new Date(student.dateofbirth).toLocaleDateString('vi-VN') : '-'}
+                          {student.dateOfBirth
+                            ? new Date(student.dateOfBirth).toLocaleDateString('vi-VN')
+                            : (student.dateofbirth ? new Date(student.dateofbirth).toLocaleDateString('vi-VN') : '-')}
                         </td>
                       </tr>
                     ))}

@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import API_URL from '../../config/api';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import { getTokenFromStorage, getAuthHeaders } from '../../utils/auth';
+import { getAuthHeaders, removeToken } from '../../utils/auth';
 
 // --- Helper Components for UI ---
 
@@ -83,14 +83,14 @@ const SessionDetail = () => {
       try {
         setLoading(true);
         // Lấy thông tin tiết học theo periodid
-        const sessionRes = await fetch(`${API_URL}/api/periods/${sessionid}`, { headers: { ...getAuthHeaders() } });
+        const sessionRes = await fetch(`${API_URL}/api/periods/${sessionid}`, { headers: getAuthHeaders() });
         if (!sessionRes.ok) throw new Error('Không thể tải dữ liệu tiết học');
         const sessionData = await sessionRes.json();
         setSessionInfo(sessionData);
         // Lấy tên môn học nếu có subjectid
         if (sessionData.subjectid) {
           try {
-            const subjectRes = await fetch(`${API_URL}/api/subjects/${sessionData.subjectid}`, { headers: { ...getAuthHeaders() } });
+            const subjectRes = await fetch(`${API_URL}/api/subjects/${sessionData.subjectid}`, { headers: getAuthHeaders() });
             if (subjectRes.ok) {
               const subjectData = await subjectRes.json();
               setSubjectName(subjectData.subjectname || `Môn ${sessionData.subjectid}`);
@@ -104,26 +104,27 @@ const SessionDetail = () => {
           setSubjectName('-');
         }
         // Lấy thông tin lớp
-        const classRes = await fetch(`${API_URL}/api/classes/${sessionData.classid}`, { headers: { ...getAuthHeaders() } });
+        const classRes = await fetch(`${API_URL}/api/classes/${sessionData.classid}`, { headers: getAuthHeaders() });
         if (!classRes.ok) throw new Error('Không thể tải dữ liệu lớp');
         const classData = await classRes.json();
         setClassInfo(classData);
         // Lấy danh sách học sinh trong lớp
-        const studentRes = await fetch(`${API_URL}/api/students/by-class/${classData.classid}`, { headers: { ...getAuthHeaders() } });
-        const studentData = await studentRes.json();
-        setStudents(studentData.items || studentData || []);
+        const studentRes = await fetch(`${API_URL}/api/students?classId=${classData.classid}`, { headers: getAuthHeaders() });
+        const studentDataRaw = await studentRes.json();
+        const studentData = Array.isArray(studentDataRaw.items) ? studentDataRaw.items : studentDataRaw;
+        setStudents(Array.isArray(studentData) ? studentData : []);
         // Lấy danh sách phụ huynh
-        const parentRes = await fetch(`${API_URL}/api/user-accounts`, { headers: { ...getAuthHeaders() } });
+        const parentRes = await fetch(`${API_URL}/api/user-accounts`, { headers: getAuthHeaders() });
         const parentData = await parentRes.json();
         setParentAccounts(parentData);
         // Lấy tên giáo viên chủ nhiệm
         let name = 'Không rõ';
         if (classData.teacherhomeroomid) {
-          const teacherRes = await fetch(`${API_URL}/api/teachers/${classData.teacherhomeroomid}`, { headers: { ...getAuthHeaders() } });
+          const teacherRes = await fetch(`${API_URL}/api/teachers/${classData.teacherhomeroomid}`, { headers: getAuthHeaders() });
           if (teacherRes.ok) {
             const teacher = await teacherRes.json();
             if (teacher.userid) {
-              const userRes = await fetch(`${API_URL}/api/user-accounts/${teacher.userid}`, { headers: { ...getAuthHeaders() } });
+              const userRes = await fetch(`${API_URL}/api/user-accounts/${teacher.userid}`, { headers: getAuthHeaders() });
               if (userRes.ok) {
                 const userData = await userRes.json();
                 name = userData.fullname || 'Không rõ';
@@ -147,9 +148,10 @@ const SessionDetail = () => {
   useEffect(() => {
     const fetchActivities = async () => {
       try {
-        const res = await fetch(`${API_URL}/api/activities`, { ...getAuthHeaders() });
+        const res = await fetch(`${API_URL}/api/activities`, { headers: getAuthHeaders() });
         const data = await res.json();
-        setActivities(data);
+        // Đảm bảo luôn là mảng
+        setActivities(Array.isArray(data) ? data : (Array.isArray(data.items) ? data.items : []));
       } catch (err) {
         setActivities([]);
       }
@@ -215,7 +217,7 @@ const SessionDetail = () => {
     }
   };
 
-  const filteredActivities = activities.filter(act => act.isnegative === !isPositive);
+  const filteredActivities = Array.isArray(activities) ? activities.filter(act => act.isnegative === !isPositive) : [];
 
   return (
     <div className="flex-1 bg-gray-50/50 p-6">

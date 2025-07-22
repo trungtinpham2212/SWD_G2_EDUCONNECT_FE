@@ -3,6 +3,7 @@ import API_URL from '../../config/api';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { FaSave, FaCloudUploadAlt, FaEye, FaEyeSlash, FaEdit } from 'react-icons/fa';
+import { getAuthHeaders, removeToken } from '../../utils/auth';
 
 const ParentSetting = ({ user }) => {
   const [avatarUrl, setAvatarUrl] = useState('');
@@ -37,7 +38,7 @@ const ParentSetting = ({ user }) => {
     const fetchProfile = async () => {
       setLoadingProfile(true);
       try {
-        const res = await fetch(`${API_URL}/api/user-accounts/${user.userId}`);
+        const res = await fetch(`${API_URL}/api/user-accounts/${user.userId}`, { headers: getAuthHeaders() });
         const data = await res.json();
         setProfileForm({
           currentPassword: '',
@@ -114,7 +115,8 @@ const ParentSetting = ({ user }) => {
       formData.append('password', '');
       const response = await fetch(`${API_URL}/api/user-accounts/${user.userId}`, {
         method: 'PUT',
-        body: formData
+        body: formData,
+        headers: getAuthHeaders().Authorization ? { Authorization: getAuthHeaders().Authorization } : undefined
       });
       let text = await response.text();
       const normalized = text.replace(/"/g, '').trim();
@@ -122,14 +124,20 @@ const ParentSetting = ({ user }) => {
         let newAvatarUrl = '';
         try {
           const json = JSON.parse(text);
-          newAvatarUrl = json?.user?.avatarUrl || '';
+          newAvatarUrl = json.avatarUrl || json.avatarurl || '';
         } catch {}
         setAvatarUrl(newAvatarUrl);
+        setProfileForm(prev => ({ ...prev, avatarurl: newAvatarUrl }));
+        // Cập nhật user object trong localStorage
+        const updatedUser = { ...user, avatarUrl: newAvatarUrl };
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+        toast.success('Cập nhật thông tin cá nhân thành công!');
         setProfileForm(prev => ({ ...prev, currentPassword: '', password: '', confirmPassword: '' }));
         setShowChangePasswordModal(false);
         setIsEditing(false);
         setAvatarFile(null);
         setAvatarRemoved(false);
+        // Không setAvatarUrl('') ở đây nữa!
       } else {
         toast.error('Lỗi khi cập nhật: ' + normalized);
       }
@@ -212,7 +220,8 @@ const ParentSetting = ({ user }) => {
       
       const response = await fetch(`${API_URL}/api/user-accounts/${user.userId}`, {
         method: 'PUT',
-        body: formData
+        body: formData,
+        headers: getAuthHeaders()
       });
       
       let text = await response.text();
@@ -282,7 +291,7 @@ const ParentSetting = ({ user }) => {
                   {avatarUrl ? (
                     <div className="relative flex flex-col items-center">
                       <img
-                        src={avatarUrl}
+                        src={avatarUrl || profileForm.avatarurl || user.avatarUrl || ''}
                         alt="avatar"
                         className={`w-32 h-32 rounded-full object-cover border-4 border-blue-200 shadow mb-2 transition-all ${uploading ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
                         onClick={isEditing && !uploading ? handleAvatarClick : undefined}

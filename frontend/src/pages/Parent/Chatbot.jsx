@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { FaPaperPlane, FaRobot, FaUser, FaSpinner, FaMicrophone, FaVolumeUp } from 'react-icons/fa';
+import { FaPaperPlane, FaRobot, FaUser, FaSpinner } from 'react-icons/fa';
 import API_URL from '../../config/api';
+import { getAuthHeaders, removeToken } from '../../utils/auth';
 
 const Chatbot = ({ user }) => {
   const [messages, setMessages] = useState([
@@ -22,7 +23,7 @@ const Chatbot = ({ user }) => {
     const fetchAvatar = async () => {
       if (user?.userId) {
         try {
-          const res = await fetch(`${API_URL}/api/user-accounts/${user.userId}`);
+          const res = await fetch(`${API_URL}/api/user-accounts/${user.userId}`, { headers: getAuthHeaders() });
           if (res.ok) {
             const data = await res.json();
             setAvatarUrl(data.avatarurl || null);
@@ -46,23 +47,22 @@ const Chatbot = ({ user }) => {
   // Call AI API
   const generateAIResponse = async (userMessage) => {
     try {
-      const response = await fetch(`${API_URL}/api/chat-boxes/chatbox/ask`, {
+      const response = await fetch(`${API_URL}/api/chat-boxes`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...getAuthHeaders()
         },
         body: JSON.stringify({
           messagetext: userMessage,
           parentId: user?.userId || 0
         })
       });
-      console.log(`${API_URL}/api/chat-boxes/chatbox/ask`);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-
       const data = await response.json();
-      // Lấy đúng trường messagetext từ response
+      // Lấy đúng trường messagetext từ response mới (data.data.messagetext)
       return data?.data?.messagetext || "Xin lỗi, tôi không thể xử lý câu hỏi của bạn lúc này.";
     } catch (error) {
       console.error('Error calling AI API:', error);
@@ -228,19 +228,6 @@ const Chatbot = ({ user }) => {
                   {formatTime(message.timestamp)}
                 </p>
               </div>
-              {/* Volume Icon for AI messages - outside bubble, right aligned, vertically centered */}
-              {message.sender === 'ai' && (
-                <button
-                  type="button"
-                  className="ml-2 text-gray-400 hover:text-blue-600 transition-colors duration-200 flex items-center"
-                  title="Nghe trả lời (sắp ra mắt)"
-                  tabIndex={-1}
-                  disabled
-                  style={{ alignSelf: 'center' }}
-                >
-                  <FaVolumeUp className="text-base" />
-                </button>
-              )}
             </div>
           </div>
         ))}
@@ -280,17 +267,6 @@ const Chatbot = ({ user }) => {
               style={{ minHeight: '44px', maxHeight: '120px' }}
             />
           </div>
-          {/* Microphone Icon */}
-          <button
-            type="button"
-            className="h-[44px] aspect-square flex items-center justify-center p-0 rounded-lg bg-gray-100 text-gray-500 hover:bg-blue-100 hover:text-blue-600 transition-colors duration-200"
-            title="Sử dụng micro (sắp ra mắt)"
-            tabIndex={-1}
-            style={{ minHeight: '44px', minWidth: '44px' }}
-            disabled
-          >
-            <FaMicrophone className="text-lg" />
-          </button>
           <button
             onClick={handleSendMessage}
             disabled={!inputMessage.trim() || isTyping}
@@ -309,9 +285,7 @@ const Chatbot = ({ user }) => {
         <div className="mt-3 flex flex-wrap gap-2">
           {[
             "Thông tin học tập",
-            "Lịch học",
-            "Điểm số",
-            "Liên hệ giáo viên"
+            "Lịch học"
           ].map((suggestion) => (
             <button
               key={suggestion}

@@ -34,8 +34,8 @@ const StudentAdmin = () => {
         try {
             setLoading(true);
             const [studentRes, classRes, parentRes] = await Promise.all([
-                fetch(`${API_URL}/api/students?page=1&pageSize=100`, { headers: getAuthHeaders() }),
-                fetch(`${API_URL}/api/classes?page=1&pageSize=100`, { headers: getAuthHeaders() }),
+                fetch(`${API_URL}/api/students?page=1&pageSize=${ITEMS_PER_PAGE}`, { headers: getAuthHeaders() }),
+                fetch(`${API_URL}/api/classes?page=1&pageSize=${ITEMS_PER_PAGE}`, { headers: getAuthHeaders() }),
                 fetch(`${API_URL}/api/user-accounts`, { headers: getAuthHeaders() })
             ]);
             const studentDataRaw = await studentRes.json();
