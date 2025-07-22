@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import API_URL from '../../config/api';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import { getTokenFromStorage, getAuthHeaders } from '../../utils/auth';
 
 const ClassManagement = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) => {
   const [classes, setClasses] = useState([]);
@@ -27,11 +28,7 @@ const ClassManagement = ({ user, active, setActive, isSidebarOpen, setSidebarOpe
   const [creating, setCreating] = useState(false);
   const [updating, setUpdating] = useState(false);
 
-  // Helper lấy token từ localStorage
-  const getAuthHeaders = () => {
-    const token = localStorage.getItem('token');
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  };
+
 
   const fetchData = async () => {
     try {

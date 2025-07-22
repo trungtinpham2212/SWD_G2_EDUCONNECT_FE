@@ -2,15 +2,12 @@ import React, { useEffect, useState } from 'react';
 import API_URL from '../../config/api';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import { getTokenFromStorage, getAuthHeaders } from '../../utils/auth';
 
 const TeacherManagement = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) => {
   const [teachers, setTeachers] = useState([]);
-  const [userAccounts, setUserAccounts] = useState([]);
   const [subjects, setSubjects] = useState([]);
   const [classes, setClasses] = useState([]);
-  const [schoolYears, setSchoolYears] = useState([]);
-  const [sections, setSections] = useState([]);
-  // const [evaluations, setEvaluations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showModal, setShowModal] = useState(false);
@@ -26,90 +23,116 @@ const TeacherManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
     roleid: 2,
     subjectid: ''
   });
-  const [editingUser, setEditingUser] = useState(null);
+  const [editingTeacher, setEditingTeacher] = useState(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [userToDelete, setUserToDelete] = useState(null);
+  const [teacherToDelete, setTeacherToDelete] = useState(null);
   const [activeTab, setActiveTab] = useState('user');
 
-  // Helper lấy token từ localStorage
-  const getAuthHeaders = () => {
-    const token = localStorage.getItem('token');
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  };
+
 
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [userRes, teacherRes, subjectRes, classRes, yearRes, sectionRes, evaluationRes] = await Promise.all([
-        fetch(`${API_URL}/api/user-accounts`, { headers: getAuthHeaders() }),
-        fetch(`${API_URL}/api/teachers?page=1&pageSize=15`, { headers: getAuthHeaders() }),
-        fetch(`${API_URL}/api/subjects?page=1&pageSize=15`, { headers: getAuthHeaders() }),
-        fetch(`${API_URL}/api/classes?page=1&pageSize=15`, { headers: getAuthHeaders() }),
-        fetch(`${API_URL}/api/school-years`, { headers: getAuthHeaders() }),
-        fetch(`${API_URL}/api/periods?page=1&pageSize=15`, { headers: getAuthHeaders() }),
-        // fetch(`${API_URL}/api/evaluations`)
+      
+      // Kiểm tra token trước khi gọi API
+      const token = getTokenFromStorage();
+      if (!token) {
+        setError('Không tìm thấy token xác thực. Vui lòng đăng nhập lại.');
+        toast.error('Vui lòng đăng nhập lại');
+        return;
+      }
+
+      const [teacherRes, subjectRes, classRes] = await Promise.all([
+        fetch(`${API_URL}/api/teachers?page=1&pageSize=100`, { 
+          headers: getAuthHeaders(),
+          credentials: 'include'
+        }),
+        fetch(`${API_URL}/api/subjects?page=1&pageSize=50`, { 
+          headers: getAuthHeaders(),
+          credentials: 'include'
+        }),
+        fetch(`${API_URL}/api/classes?page=1&pageSize=100`, { 
+          headers: getAuthHeaders(),
+          credentials: 'include'
+        }),
       ]);
-      const userData = await userRes.json();
+      
+      // Kiểm tra lỗi 401 cho từng response
+      if (teacherRes.status === 401 || subjectRes.status === 401 || classRes.status === 401) {
+        localStorage.removeItem('token');
+        setError('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+        toast.error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+        return;
+      }
+
+      if (!teacherRes.ok || !subjectRes.ok || !classRes.ok) {
+        throw new Error(`HTTP error! Teacher: ${teacherRes.status}, Subject: ${subjectRes.status}, Class: ${classRes.status}`);
+      }
+
       const teacherDataRaw = await teacherRes.json();
       const subjectDataRaw = await subjectRes.json();
       const classDataRaw = await classRes.json();
-      const sectionDataRaw = await sectionRes.json();
-      // const evaluationData = await evaluationRes.json();
 
-      setUserAccounts(userData.filter(u => u.roleid === 2));
       const teacherData = Array.isArray(teacherDataRaw.items) ? teacherDataRaw.items : [];
       const subjectData = Array.isArray(subjectDataRaw.items) ? subjectDataRaw.items : [];
       const classData = Array.isArray(classDataRaw.items) ? classDataRaw.items : [];
-      const sectionData = Array.isArray(sectionDataRaw.items) ? sectionDataRaw.items : [];
-      const yearData = await yearRes.json();
-      setSchoolYears(yearData);
-      setSections(sectionData);
+      
       setTeachers(teacherData);
       setSubjects(subjectData);
       setClasses(classData);
       setError(null);
     } catch (error) {
-      console.error(error);
-      toast.error('Có lỗi xảy ra khi lấy dữ liệu: ' + error.message);
+      console.error('Fetch error:', error);
+      if (error.message.includes('401')) {
+        localStorage.removeItem('token');
+        setError('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+        toast.error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+      } else {
+        setError('Có lỗi xảy ra khi lấy dữ liệu: ' + error.message);
+        toast.error('Có lỗi xảy ra khi lấy dữ liệu: ' + error.message);
+      }
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
+    const token = getTokenFromStorage();
+    
+    if (!token) {
+      setError('Không tìm thấy token xác thực. Vui lòng đăng nhập lại.');
+      setLoading(false);
+      return;
+    }
+    
     fetchData();
   }, []);
-
-  const getSubjectName = (teacher) => {
-    if (!teacher || !teacher.subjectid) return '-';
-    const subject = subjects.find(s => s.subjectid === teacher.subjectid);
-    return subject ? subject.subjectname : '-';
-  };
 
   const getHomeroomClass = (teacherid) => {
     const cls = classes.find(c => c.teacherhomeroomid === teacherid);
     if (!cls) return null;
-    const year = schoolYears.find(y => y.schoolyearid === cls.schoolyearid);
+    // Sử dụng trực tiếp schoolYear từ API response thay vì tìm kiếm
     return {
       classname: cls.classname,
-      year: year ? year.year : '-'
+      year: cls.schoolYear || '-',
+      grade: cls.grade,
+      studentCount: cls.liststudent ? cls.liststudent.length : 0
     };
   };
 
-  const handleOpenModal = (user = null) => {
-    if (user) {
-      const teacher = teachers.find(t => t.userid === user.userid);
+  const handleOpenModal = (teacher = null) => {
+    if (teacher) {
       setForm({
-        username: user.username,
+        username: teacher.user?.username || '',
         password: '',
-        fullname: user.fullname,
-        email: user.email,
-        phonenumber: user.phonenumber,
-        address: user.address,
+        fullname: teacher.user?.fullname || '',
+        email: teacher.user?.email || '',
+        phonenumber: teacher.user?.phonenumber || '',
+        address: teacher.user?.address || '',
         roleid: 2,
-        subjectid: teacher ? teacher.subjectid : ''
+        subjectid: teacher.subjectid || ''
       });
-      setEditingUser(user);
+      setEditingTeacher(teacher);
     } else {
       setForm({
         username: '',
@@ -121,7 +144,7 @@ const TeacherManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
         roleid: 2,
         subjectid: ''
       });
-      setEditingUser(null);
+      setEditingTeacher(null);
     }
     setActiveTab('user');
     setShowModal(true);
@@ -135,8 +158,14 @@ const TeacherManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
     e.preventDefault();
     setIsSubmitting(true);
     try {
+      const token = getTokenFromStorage();
+      if (!token) {
+        toast.error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+        return;
+      }
+
       if (activeTab === 'user') {
-        if (editingUser) {
+        if (editingTeacher) {
           // Sửa giáo viên
           const formData = new FormData();
           formData.append('Password', form.password);
@@ -145,11 +174,19 @@ const TeacherManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
           formData.append('PhoneNumber', form.phonenumber);
           formData.append('Address', form.address);
           formData.append('RoleId', 2);
-          const response = await fetch(`${API_URL}/api/user-accounts/${editingUser.userid}`, {
+          
+          const response = await fetch(`${API_URL}/api/user-accounts/${editingTeacher.userid}`, {
             method: 'PUT',
-            headers: { ...getAuthHeaders() },
+            headers: { 'Authorization': `Bearer ${token}` },
             body: formData
           });
+
+          if (response.status === 401) {
+            localStorage.removeItem('token');
+            toast.error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+            return;
+          }
+
           const text = await response.text();
           const normalized = text.replace(/"/g, '').trim();
           if (response.ok || normalized.toLowerCase().includes('success') || normalized.includes('Update successful')) {
@@ -160,56 +197,63 @@ const TeacherManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
             toast.error('Lỗi khi cập nhật: ' + normalized);
           }
         } else {
-          // Tạo giáo viên mới: GỬI DẠNG JSON, truyền đủ subjectId
-          setIsSubmitting(true);
+          // Tạo giáo viên mới
+          const response = await fetch(`${API_URL}/api/user-accounts/register`, {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({
+              username: form.username,
+              password: form.password,
+              fullname: form.fullname,
+              email: form.email,
+              phoneNumber: form.phonenumber,
+              address: form.address,
+              roleId: 2,
+              subjectId: form.subjectid ? Number(form.subjectid) : 0
+            })
+          });
+
+          if (response.status === 401) {
+            localStorage.removeItem('token');
+            toast.error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+            return;
+          }
+
+          let data;
+          const resText = await response.text();
           try {
-            const response = await fetch(`${API_URL}/api/user-accounts/register`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-              body: JSON.stringify({
-                username: form.username,
-                password: form.password,
-                fullname: form.fullname,
-                email: form.email,
-                phoneNumber: form.phonenumber,
-                address: form.address,
-                roleId: 2,
-                subjectId: form.subjectid ? Number(form.subjectid) : 0
-              })
-            });
-            let data;
-            const resText = await response.text();
-            try {
-              data = JSON.parse(resText);
-            } catch {
-              data = resText;
-            }
-            if (response.ok && (typeof data === 'object' || (typeof data === 'string' && data.toLowerCase().includes('success')))) {
-              await fetchData();
-              setShowModal(false);
-              toast.success('Tạo giáo viên thành công!');
-            } else {
-              const msg = typeof data === 'string' ? data : (data.message || 'Tạo giáo viên thất bại!');
-              toast.error('Lỗi khi tạo giáo viên: ' + msg);
-            }
-          } catch (err) {
-            toast.error('Lỗi khi tạo giáo viên: ' + (err.message || err));
-          } finally {
-            setIsSubmitting(false);
+            data = JSON.parse(resText);
+          } catch {
+            data = resText;
+          }
+          if (response.ok && (typeof data === 'object' || (typeof data === 'string' && data.toLowerCase().includes('success')))) {
+            await fetchData();
+            setShowModal(false);
+            toast.success('Tạo giáo viên thành công!');
+          } else {
+            const msg = typeof data === 'string' ? data : (data.message || 'Tạo giáo viên thất bại!');
+            toast.error('Lỗi khi tạo giáo viên: ' + msg);
           }
         }
-      } else if (activeTab === 'subject' && editingUser) {
+      } else if (activeTab === 'subject' && editingTeacher) {
         // Gán môn học
-        const teacher = teachers.find(t => t.userid === editingUser.userid);
-        if (teacher && form.subjectid && form.subjectid !== teacher.subjectid) {
+        if (form.subjectid && form.subjectid !== editingTeacher.subjectid) {
           const formData = new FormData();
-          formData.append('teacherId', teacher.teacherid);
+          formData.append('teacherId', editingTeacher.teacherid);
           formData.append('subjectId', Number(form.subjectid));
-          const response = await fetch(`${API_URL}/api/teachers/${teacher.teacherid}`, {
+          
+          const response = await fetch(`${API_URL}/api/teachers/${editingTeacher.teacherid}`, {
             method: 'PUT',
-            headers: { ...getAuthHeaders() },
+            headers: { 'Authorization': `Bearer ${getTokenFromStorage()}` },
             body: formData
           });
+
+          if (response.status === 401) {
+            localStorage.removeItem('token');
+            toast.error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+            return;
+          }
+
           const responseText = await response.text();
           const normalized = responseText.replace(/"/g, '').trim();
           if (response.ok || normalized.toLowerCase().includes('success')) {
@@ -219,85 +263,87 @@ const TeacherManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
           } else {
             toast.error('Lỗi khi gán môn học: ' + normalized);
           }
-        } else if (!teacher) {
-          toast.error('Không tìm thấy thông tin giáo viên');
         } else if (!form.subjectid) {
           toast.error('Vui lòng chọn môn học');
-        } else if (form.subjectid === teacher.subjectid) {
+        } else if (form.subjectid === editingTeacher.subjectid) {
           toast.info('Môn học đã được gán cho giáo viên này');
         }
         setShowModal(false);
       }
     } catch (error) {
-      console.error(error);
-      toast.error('Đã xảy ra lỗi khi xử lý.');
+      if (error.message.includes('401') || error.status === 401) {
+        localStorage.removeItem('token');
+        toast.error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+      } else {
+        toast.error('Đã xảy ra lỗi khi xử lý: ' + error.message);
+      }
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleDelete = async (user) => {
-    const teacher = teachers.find(t => t.userid === user.userid);
-    
-    setUserToDelete({
-      ...user,
-      teacherid: teacher?.teacherid || null
-    });
+  const handleDelete = async (teacher) => {
+    setTeacherToDelete(teacher);
     setShowDeleteModal(true);
   };
 
   const confirmDelete = async () => {
-    if (!userToDelete) return;
+    if (!teacherToDelete) return;
     
     setIsDeleting(true);
     try {
-      const teacher = teachers.find(t => t.userid === userToDelete.userid);
+      const token = getTokenFromStorage();
+      if (!token) {
+        toast.error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+        return;
+      }
+
+      // Kiểm tra chủ nhiệm lớp
+      const homeroomClass = classes.find(c => c.teacherhomeroomid === teacherToDelete.teacherid);
+      if (homeroomClass) {
+        toast.error(`Không thể xóa giáo viên vì đang làm chủ nhiệm lớp ${homeroomClass.classname}. Vui lòng đổi giáo viên chủ nhiệm trước.`);
+        return;
+      }
+
+      // Kiểm tra tiết học
+      if (teacherToDelete.periods && teacherToDelete.periods.length > 0) {
+        toast.error('Không thể xóa giáo viên vì có tiết học được gán. Vui lòng xóa tất cả tiết học của giáo viên này trước.');
+        return;
+      }
+
+      // Xóa teacher record trước
+      const teacherRes = await fetch(`${API_URL}/api/teachers/${teacherToDelete.teacherid}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
       
-      // Nếu có teacher record, kiểm tra các ràng buộc trước khi xóa
-      if (teacher) {
-        // Kiểm tra chủ nhiệm lớp
-        const homeroomClass = classes.find(c => c.teacherhomeroomid === teacher.teacherid);
-        if (homeroomClass) {
-          toast.error(`Không thể xóa giáo viên vì đang làm chủ nhiệm lớp ${homeroomClass.classname}. Vui lòng đổi giáo viên chủ nhiệm trước.`);
-          return;
-        }
+      if (teacherRes.status === 401) {
+        localStorage.removeItem('token');
+        toast.error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+        return;
+      }
 
-        // Kiểm tra tiết học
-        const hasPeriods = sections.some(s => s.teacherid === teacher.teacherid);
-        if (hasPeriods) {
-          toast.error('Không thể xóa giáo viên vì có tiết học được gán. Vui lòng xóa tất cả tiết học của giáo viên này trước.');
-          return;
+      if (!teacherRes.ok) {
+        const teacherResText = await teacherRes.text();
+        if (teacherResText.includes('REFERENCE constraint') || teacherResText.includes('foreign key')) {
+          toast.error('Không thể xóa giáo viên vì có dữ liệu liên quan. Vui lòng xóa các dữ liệu liên quan trước.');
+        } else {
+          toast.error('Lỗi khi xóa hồ sơ giáo viên.');
         }
-
-        // Kiểm tra đánh giá
-        // const hasEvaluations = evaluations.some(e => e.teacherid === teacher.teacherid);
-        // if (hasEvaluations) {
-        //   toast.error('Không thể xóa giáo viên vì có đánh giá được tạo. Vui lòng xóa tất cả đánh giá của giáo viên này trước.');
-        //   return;
-        // }
-
-        // Xóa teacher record trước
-        const teacherRes = await fetch(`${API_URL}/api/teachers/${teacher.teacherid}`, {
-          method: 'DELETE',
-          headers: getAuthHeaders()
-        });
-        
-        if (!teacherRes.ok) {
-          const teacherResText = await teacherRes.text();
-          if (teacherResText.includes('REFERENCE constraint') || teacherResText.includes('foreign key')) {
-            toast.error('Không thể xóa giáo viên vì có dữ liệu liên quan. Vui lòng xóa các dữ liệu liên quan trước.');
-          } else {
-            toast.error('Lỗi khi xóa hồ sơ giáo viên.');
-          }
-          return;
-        }
+        return;
       }
 
       // Xóa user account
-      const userRes = await fetch(`${API_URL}/api/user-accounts/${userToDelete.userid}`, {
+      const userRes = await fetch(`${API_URL}/api/user-accounts/${teacherToDelete.userid}`, {
         method: 'DELETE',
-        headers: getAuthHeaders()
+        headers: { 'Authorization': `Bearer ${token}` }
       });
+
+      if (userRes.status === 401) {
+        localStorage.removeItem('token');
+        toast.error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+        return;
+      }
       
       const userResText = await userRes.text();
       const userResNormalized = userResText.replace(/"/g, '').trim();
@@ -320,10 +366,15 @@ const TeacherManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
         }
       }
     } catch (error) {
-      toast.error('Có lỗi xảy ra khi xóa giáo viên.');
+      if (error.message.includes('401') || error.status === 401) {
+        localStorage.removeItem('token');
+        toast.error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+      } else {
+        toast.error('Có lỗi xảy ra khi xóa giáo viên: ' + error.message);
+      }
     } finally {
       setShowDeleteModal(false);
-      setUserToDelete(null);
+      setTeacherToDelete(null);
       setIsDeleting(false);
     }
   };
@@ -339,7 +390,32 @@ const TeacherManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
             <p className="mt-4 text-gray-600">Đang tải danh sách giáo viên...</p>
           </div>
         ) : error ? (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-600">{error}</div>
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+            <div className="flex">
+              <div className="flex-shrink-0">
+                <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <h3 className="text-sm font-medium text-red-800">Lỗi xác thực</h3>
+                <p className="mt-1 text-sm text-red-600">{error}</p>
+                {error.includes('token') && (
+                  <div className="mt-3">
+                    <button 
+                      onClick={() => {
+                        localStorage.clear();
+                        window.location.reload();
+                      }}
+                      className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-red-700 bg-red-100 hover:bg-red-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                    >
+                      Đăng nhập lại
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
@@ -351,30 +427,45 @@ const TeacherManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Môn dạy</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Chủ nhiệm lớp</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Năm học</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sĩ số</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Thao tác</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {userAccounts.length === 0 ? (
+                {teachers.length === 0 ? (
                   <tr>
-                    <td colSpan="7" className="px-4 py-4 text-center text-gray-500">Không có giáo viên nào</td>
+                    <td colSpan="8" className="px-4 py-4 text-center text-gray-500">Không có giáo viên nào</td>
                   </tr>
                 ) : (
-                  userAccounts.map((u, idx) => {
-                    const teacher = (Array.isArray(teachers) ? teachers : []).find(t => t.userid === u.userid);
-                    const subjectName = teacher ? getSubjectName(teacher) : '-';
-                    const homeroom = teacher ? getHomeroomClass(teacher.teacherid) : null;
+                  teachers.map((teacher, idx) => {
+                    const subjectName = teacher.subject?.subjectname || '-';
+                    const homeroom = getHomeroomClass(teacher.teacherid);
                     return (
-                      <tr key={u.userid}>
+                      <tr key={teacher.teacherid}>
                         <td className="px-4 py-2 text-sm text-gray-500">{idx + 1}</td>
-                        <td className="px-4 py-2 text-sm text-gray-900">{teacher && teacher.user ? teacher.user.fullname : u.fullname}</td>
-                        <td className="px-4 py-2 text-sm text-gray-900">{teacher && teacher.user ? teacher.user.email : u.email}</td>
+                        <td className="px-4 py-2 text-sm text-gray-900">{teacher.user?.fullname || '-'}</td>
+                        <td className="px-4 py-2 text-sm text-gray-900">{teacher.user?.email || '-'}</td>
                         <td className="px-4 py-2 text-sm text-gray-900">{subjectName}</td>
-                        <td className="px-4 py-2 text-sm text-gray-900">{homeroom ? homeroom.classname : <span className="text-gray-400">-</span>}</td>
+                        <td className="px-4 py-2 text-sm text-gray-900">
+                          {homeroom ? (
+                            <span className="font-medium">{homeroom.classname}</span>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </td>
                         <td className="px-4 py-2 text-sm text-gray-900">{homeroom ? homeroom.year : <span className="text-gray-400">-</span>}</td>
                         <td className="px-4 py-2 text-sm text-gray-900">
-                          <button className="px-3 py-1 bg-yellow-600 text-white rounded hover:bg-yellow-700 mr-2" onClick={() => handleOpenModal(u)}>Sửa</button>
-                          <button className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700" onClick={() => handleDelete(u)}>Xóa</button>
+                          {homeroom ? (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                              {homeroom.studentCount} học sinh
+                            </span>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-2 text-sm text-gray-900">
+                          <button className="px-3 py-1 bg-yellow-600 text-white rounded hover:bg-yellow-700 mr-2" onClick={() => handleOpenModal(teacher)}>Sửa</button>
+                          <button className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700" onClick={() => handleDelete(teacher)}>Xóa</button>
                         </td>
                       </tr>
                     );
@@ -389,8 +480,8 @@ const TeacherManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
       {showModal && (
         <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-lg">
-            <h3 className="text-xl font-bold mb-4">{editingUser ? 'Sửa giáo viên' : 'Thêm giáo viên mới'}</h3>
-            {editingUser && (
+            <h3 className="text-xl font-bold mb-4">{editingTeacher ? 'Sửa giáo viên' : 'Thêm giáo viên mới'}</h3>
+            {editingTeacher && (
               <div className="flex mb-4 gap-2">
                 <button
                   className={`px-4 py-2 rounded ${activeTab === 'user' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'}`}
@@ -410,11 +501,11 @@ const TeacherManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
               <form onSubmit={handleSubmit}>
                 <div className="mb-4">
                   <label className="block text-sm font-medium text-gray-700">Tên đăng nhập</label>
-                  <input type="text" name="username" value={form.username} onChange={handleChange} required className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2" disabled={!!editingUser} />
+                  <input type="text" name="username" value={form.username} onChange={handleChange} required className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2" disabled={!!editingTeacher} />
                 </div>
                 <div className="mb-4">
                   <label className="block text-sm font-medium text-gray-700">Mật khẩu</label>
-                  <input type="password" name="password" value={form.password} onChange={handleChange} required={!editingUser} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2" placeholder={editingUser ? 'Để trống nếu không muốn đổi' : ''} />
+                  <input type="password" name="password" value={form.password} onChange={handleChange} required={!editingTeacher} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2" placeholder={editingTeacher ? 'Để trống nếu không muốn đổi' : ''} />
                 </div>
                 <div className="mb-4">
                   <label className="block text-sm font-medium text-gray-700">Họ và tên</label>
@@ -432,7 +523,7 @@ const TeacherManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
                   <label className="block text-sm font-medium text-gray-700">Địa chỉ</label>
                   <input type="text" name="address" value={form.address} onChange={handleChange} required className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2" />
                 </div>
-                {!editingUser && (
+                {!editingTeacher && (
                 <div className="mb-4">
                   <label className="block text-sm font-medium text-gray-700">Môn dạy</label>
                   <select name="subjectid" value={form.subjectid} onChange={handleChange} required className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2">
@@ -462,7 +553,7 @@ const TeacherManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
                 </div>
               </form>
             )}
-            {activeTab === 'subject' && editingUser && (
+            {activeTab === 'subject' && editingTeacher && (
               <form
                 onSubmit={handleSubmit}
               >

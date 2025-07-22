@@ -3,6 +3,7 @@ import API_URL from '../../config/api';
 import { FaSearch, FaEye, FaCalendarAlt, FaFileAlt, FaPlus, FaUserGraduate } from 'react-icons/fa';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
+import { getTokenFromStorage, getAuthHeaders } from '../../utils/auth';
 
 const ITEMS_PER_PAGE = 9;
 
@@ -146,11 +147,7 @@ const ReportManagement = ({ user }) => {
     if (page >= 1 && page <= totalPages) setCurrentPage(page);
   };
 
-  // Helper lấy token từ localStorage
-  const getAuthHeaders = () => {
-    const token = localStorage.getItem('token');
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  };
+
 
   return (
     <div className="flex-1 p-6">

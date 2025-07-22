@@ -27,7 +27,7 @@ const getMenuItems = (roleId) => {
         { name: "Quản lý lớp học", icon: <FaChalkboard />, path: "/classes" },
         { name: "Quản lý tiết học", icon: <FaClock />, path: "/sessions" },
         { name: "Quản lý đánh giá", icon: <FaStar />, path: "/admin/evaluations" },
-        { name: "Báo cáo", icon: <FaChartBar />, path: "/admin/reports" },
+        // { name: "Báo cáo", icon: <FaChartBar />, path: "/admin/reports" },
         { name: "Lịch sử hoạt động", icon: <FaHistory />, path: "/activity-logs" },
         { name: "Cài đặt", icon: <FaCog />, path: "/admin/settings" },
       ];

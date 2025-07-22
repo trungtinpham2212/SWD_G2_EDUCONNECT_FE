@@ -4,14 +4,11 @@ import API_URL from '../../config/api';
 import { FaArrowLeft, FaCalendarAlt, FaFileAlt } from 'react-icons/fa';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import { getTokenFromStorage, getAuthHeaders } from '../../utils/auth';
 
 const ITEMS_PER_PAGE = 15;
 
-// Helper lấy token từ localStorage
-const getAuthHeaders = () => {
-  const token = localStorage.getItem('token');
-  return token ? { Authorization: `Bearer ${token}` } : {};
-};
+
 
 const BackIcon = (props) => (
   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" {...props}>

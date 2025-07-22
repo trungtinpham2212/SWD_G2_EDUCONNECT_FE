@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import API_URL from '../../config/api';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import { getTokenFromStorage, getAuthHeaders } from '../../utils/auth';
 
 const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) => {
   const [sections, setSections] = useState([]);
@@ -44,20 +45,58 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
     { period: 8, start: '16:00', end: '16:45' }
   ];
 
-  // Helper: sinh danh sách tuần cho 1 năm học
+  // Helper: sinh danh sách tuần cho 1 năm học (mặc định từ 2/12/2024 đến 8/12/2024)
+  // Note: API evaluations đã được tối ưu với filtering và sorting từ backend để tránh lag
+  // - Sử dụng StartDate/EndDate thay vì startDate/endDate
+  // - Có thể filter theo ClassId, PeriodId, TeacherId để giảm data load
+  // - Backend đã sort nên không cần sort lại ở frontend
   function generateWeeksForSchoolYear(schoolYear) {
     if (!schoolYear?.year) return [];
     const [startYear, endYear] = schoolYear.year.split('-').map(Number);
-    // Lấy ngày 2/9
+    
+    // Đặc biệt cho năm 2024-2025: bắt đầu từ tuần 2/12 - 8/12
+    if (schoolYear.year === '2024-2025') {
+      const weeks = [];
+      // Tuần mặc định từ 2/12/2024 đến 8/12/2024
+      const defaultWeekStart = new Date('2024-12-02');
+      const defaultWeekEnd = new Date('2024-12-08');
+      weeks.push({
+        label: `Tuần 1 (${defaultWeekStart.toLocaleDateString('vi-VN')} - ${defaultWeekEnd.toLocaleDateString('vi-VN')})`,
+        start: defaultWeekStart.toISOString().split('T')[0],
+        end: defaultWeekEnd.toISOString().split('T')[0],
+        weekNumber: 1
+      });
+      
+      // Tạo thêm các tuần khác nếu cần
+      let current = new Date(defaultWeekEnd);
+      current.setDate(current.getDate() + 1); // Ngày đầu tuần tiếp theo
+      let weekNumber = 2;
+      const endDate = new Date(`${endYear}-05-31`);
+      
+      while (current <= endDate) {
+        const weekStart = new Date(current);
+        const weekEnd = new Date(current);
+        weekEnd.setDate(weekEnd.getDate() + 6);
+        weeks.push({
+          label: `Tuần ${weekNumber} (${weekStart.toLocaleDateString('vi-VN')} - ${weekEnd.toLocaleDateString('vi-VN')})`,
+          start: weekStart.toISOString().split('T')[0],
+          end: weekEnd.toISOString().split('T')[0],
+          weekNumber
+        });
+        current.setDate(current.getDate() + 7);
+        weekNumber++;
+      }
+      return weeks;
+    }
+    
+    // Logic cũ cho các năm học khác
     let startDate = new Date(`${startYear}-09-02`);
-    // Nếu 2/9 không phải thứ 2 thì lùi về thứ 2 gần nhất trước hoặc bằng 2/9
-    const dayOfWeek = startDate.getDay(); // 0: CN, 1: T2, ...
+    const dayOfWeek = startDate.getDay();
     if (dayOfWeek !== 1) {
-      // Lùi về thứ 2 gần nhất
-      const diff = (dayOfWeek === 0 ? 6 : dayOfWeek - 1); // Nếu là CN thì lùi 6 ngày, còn lại lùi dayOfWeek-1
+      const diff = (dayOfWeek === 0 ? 6 : dayOfWeek - 1);
       startDate.setDate(startDate.getDate() - diff);
     }
-    const endDate = new Date(`${endYear}-05-31`); // cuối tháng 5
+    const endDate = new Date(`${endYear}-05-31`);
     const weeks = [];
     let current = new Date(startDate);
     let weekNumber = 1;
@@ -140,15 +179,105 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
     return checkDate < today;
   }, []);
 
-  // Helper function to get evaluations for a specific section
+  // Helper function to get evaluations for a specific section (cải thiện matching)
   const getEvaluationsForSection = useCallback((periodId) => {
-    return evaluations.filter(evaluation => evaluation.periodid === periodId);
+    if (!periodId || !evaluations.length) return [];
+    
+    const matches = evaluations.filter(evaluation => {
+      // Thử nhiều cách match periodId khác nhau vì API có thể trả về field names khác nhau
+      const evalPeriodId = evaluation.periodId || evaluation.periodid || evaluation.PeriodId;
+      return Number(evalPeriodId) === Number(periodId);
+    });
+    
+    return matches;
   }, [evaluations]);
+
+  // Helper function to fetch evaluations for specific period (tối ưu cho performance)
+  const fetchEvaluationsForPeriod = useCallback(async (periodId, classId, teacherId = null) => {
+    try {
+      const token = getTokenFromStorage();
+      if (!token) return [];
+
+      // Sử dụng API với PeriodId và ClassId để lấy data chính xác
+      let apiUrl = `${API_URL}/api/evaluations?PeriodId=${periodId}&ClassId=${classId}&page=1&pageSize=100`;
+      
+      // Thêm TeacherId nếu có để filter thêm
+      if (teacherId) {
+        apiUrl += `&TeacherId=${teacherId}`;
+      }
+      
+      const res = await fetch(apiUrl, {
+        headers: getAuthHeaders()
+      });
+
+      if (res.status === 401) {
+        localStorage.removeItem('token');
+        toast.error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+        return [];
+      }
+
+      if (!res.ok) return [];
+      
+      const data = await res.json();
+      return Array.isArray(data.items) ? data.items : [];
+    } catch (err) {
+      console.error('Fetch evaluations for period error:', err);
+      return [];
+    }
+  }, []);
+
+  // Helper function to fetch evaluations by filters (cho các trường hợp đặc biệt)
+  const fetchEvaluationsByFilters = useCallback(async (filters = {}) => {
+    try {
+      const token = getTokenFromStorage();
+      if (!token) return [];
+
+      // Build query parameters
+      const params = new URLSearchParams();
+      params.append('page', '1');
+      params.append('pageSize', '500');
+      
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== null && value !== undefined) {
+          params.append(key, value);
+        }
+      });
+
+      const apiUrl = `${API_URL}/api/evaluations?${params.toString()}`;
+      
+      const res = await fetch(apiUrl, {
+        headers: getAuthHeaders()
+      });
+
+      if (res.status === 401) {
+        localStorage.removeItem('token');
+        toast.error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+        return [];
+      }
+
+      if (!res.ok) return [];
+      
+      const data = await res.json();
+      return Array.isArray(data.items) ? data.items : [];
+    } catch (err) {
+      console.error('Fetch evaluations by filters error:', err);
+      return [];
+    }
+  }, []);
 
   // Helper function to get evaluation type
   const getEvaluationType = useCallback((evaluation) => {
-    const activity = activities.find(act => act.activityid === evaluation.activityid);
-    return activity?.isnegative ? 'negative' : 'positive';
+    // API mới có thể đã include activity info trong evaluation response
+    if (evaluation.activity && typeof evaluation.activity === 'object') {
+      return evaluation.activity.isNegative ? 'negative' : 'positive';
+    }
+    // Fallback: tìm trong activities array nếu có
+    if (Array.isArray(activities) && evaluation.activityid) {
+      const activity = activities.find(act => act.activityid === evaluation.activityid);
+      return activity?.isnegative ? 'negative' : 'positive';
+    }
+    // Default: assume positive if no activity info
+    return 'positive';
   }, [activities]);
 
   // Helper function to get student preview
@@ -156,13 +285,17 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
     if (!evaluation?.students?.length) return '(0)';
     
     const firstStudent = evaluation.students[0];
-    if (!firstStudent?.classid) return `(${evaluation.students.length})`;
+    
+    // API mới có thể dùng classId thay vì classid
+    const studentClassId = firstStudent?.classId || firstStudent?.classid;
+    if (!studentClassId) return `(${evaluation.students.length})`;
 
     const classStudents = evaluations
-      .filter(e => e.students?.length > 0 && e.students[0].classid === firstStudent.classid)
-      .flatMap(e => e.students);
+      .filter(e => e.students?.length > 0)
+      .flatMap(e => e.students)
+      .filter(s => (s.classId || s.classid) === studentClassId);
     
-    const uniqueStudents = new Set(classStudents.map(s => s.studentid));
+    const uniqueStudents = new Set(classStudents.map(s => s.studentId || s.studentid));
     const classSize = uniqueStudents.size;
     
     if (evaluation.students.length === classSize) {
@@ -178,15 +311,23 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
     
     // Kiểm tra xem có phải đánh giá cả lớp không
     const firstStudent = evaluation.students[0];
-    if (!firstStudent?.classid) return evaluation.students.map(student => student.name || `Học sinh ${student.studentid}`).join(', ');
+    
+    // API mới có thể dùng classId thay vì classid
+    const studentClassId = firstStudent?.classId || firstStudent?.classid;
+    if (!studentClassId) {
+      return evaluation.students.map(student => 
+        student.name || `Học sinh ${student.studentId || student.studentid}`
+      ).join(', ');
+    }
 
     // Lấy danh sách học sinh trong lớp đó
     const classStudents = evaluations
-      .filter(e => e.students?.length > 0 && e.students[0].classid === firstStudent.classid)
-      .flatMap(e => e.students);
+      .filter(e => e.students?.length > 0)
+      .flatMap(e => e.students)
+      .filter(s => (s.classId || s.classid) === studentClassId);
     
     // Lấy số lượng học sinh duy nhất trong lớp
-    const uniqueStudents = new Set(classStudents.map(s => s.studentid));
+    const uniqueStudents = new Set(classStudents.map(s => s.studentId || s.studentid));
     const classSize = uniqueStudents.size;
     
     // Nếu số học sinh trong đánh giá bằng sĩ số lớp
@@ -195,25 +336,54 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
     }
     
     // Nếu không phải cả lớp, hiển thị danh sách tên
-    return evaluation.students.map(student => student.name || `Học sinh ${student.studentid}`).join(', ');
+    return evaluation.students.map(student => 
+      student.name || `Học sinh ${student.studentId || student.studentid}`
+    ).join(', ');
   }, [evaluations]);
 
   // Fetch static data (classes, subjects, teachers, userAccounts, activities, students) only once
   useEffect(() => {
+    // Kiểm tra token khi component mount
+    const token = getTokenFromStorage();
+    if (!token) {
+      setError('Không tìm thấy token xác thực. Vui lòng đăng nhập lại.');
+      setLoading(false);
+      return;
+    }
+
     const fetchStaticData = async () => {
       try {
         setLoading(true);
+
+        // Kiểm tra token trước khi gọi API
+        const token = getTokenFromStorage();
+        if (!token) {
+          setError('Không tìm thấy token xác thực. Vui lòng đăng nhập lại.');
+          toast.error('Vui lòng đăng nhập lại');
+          return;
+        }
+
         const [subjectRes, classRes, teacherRes, userRes, activityRes, schoolYearRes, studentRes] = await Promise.all([
-          fetch(`${API_URL}/api/subjects?page=1&pageSize=15`),
-          fetch(`${API_URL}/api/classes?page=1&pageSize=30`),
-          fetch(`${API_URL}/api/teachers?page=1&pageSize=30`),
-          fetch(`${API_URL}/api/user-accounts`),
-          fetch(`${API_URL}/api/activities`),
-          fetch(`${API_URL}/api/school-years`),
-          fetch(`${API_URL}/api/students?page=1&pageSize=400`)
+          fetch(`${API_URL}/api/subjects?page=1&pageSize=15`, { headers: getAuthHeaders() }),
+          fetch(`${API_URL}/api/classes?page=1&pageSize=30`, { headers: getAuthHeaders() }),
+          fetch(`${API_URL}/api/teachers?page=1&pageSize=30`, { headers: getAuthHeaders() }),
+          fetch(`${API_URL}/api/user-accounts`, { headers: getAuthHeaders() }),
+          fetch(`${API_URL}/api/activities`, { headers: getAuthHeaders() }),
+          fetch(`${API_URL}/api/school-years`, { headers: getAuthHeaders() }),
+          fetch(`${API_URL}/api/students?page=1&pageSize=400`, { headers: getAuthHeaders() })
         ]);
+
+        // Kiểm tra lỗi 401 cho tất cả response
+        const responses = [subjectRes, classRes, teacherRes, userRes, activityRes, schoolYearRes, studentRes];
+        if (responses.some(res => res.status === 401)) {
+          localStorage.removeItem('token');
+          setError('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+          toast.error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+          return;
+        }
+
         if (!subjectRes.ok || !classRes.ok || !teacherRes.ok || !userRes.ok || !activityRes.ok || !schoolYearRes.ok || !studentRes.ok) {
-          throw new Error('Một hoặc nhiều API call thất bại');
+          throw new Error(`HTTP error! Status: ${responses.find(r => !r.ok)?.status}`);
         }
         const [subjectData, classData, teacherData, userData, activityData, schoolYearData, studentData] = await Promise.all([
           subjectRes.json(),
@@ -224,30 +394,50 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
           schoolYearRes.json(),
           studentRes.json()
         ]);
-        setSubjects(Array.isArray(subjectData.items) ? subjectData.items : []);
-        setClasses(Array.isArray(classData.items) ? classData.items : []);
-        setTeachers(Array.isArray(teacherData.items) ? teacherData.items : []);
-        setUserAccounts(userData);
-        setActivities(activityData);
-        setSchoolYears(schoolYearData);
-        setStudents(Array.isArray(studentData.items) ? studentData.items : []);
+        // Sort dữ liệu ở frontend (xử lý null/undefined values)
+        const sortedSubjects = Array.isArray(subjectData.items) ? subjectData.items.sort((a, b) => (a.subjectname || '').localeCompare(b.subjectname || '')) : [];
+        const sortedClasses = Array.isArray(classData.items) ? classData.items.sort((a, b) => (a.classname || '').localeCompare(b.classname || '')) : [];
+        const sortedTeachers = Array.isArray(teacherData.items) ? teacherData.items.sort((a, b) => (a.teacherid || 0) - (b.teacherid || 0)) : [];
+        const sortedUserAccounts = Array.isArray(userData) ? userData.sort((a, b) => (a.fullname || '').localeCompare(b.fullname || '')) : userData;
+        const sortedActivities = Array.isArray(activityData) ? activityData.sort((a, b) => (a.activityname || '').localeCompare(b.activityname || '')) : [];
+        const sortedSchoolYears = Array.isArray(schoolYearData) ? schoolYearData.sort((a, b) => (a.year || '').localeCompare(b.year || '')) : schoolYearData;
+        const sortedStudents = Array.isArray(studentData.items) ? studentData.items.sort((a, b) => (a.fullname || '').localeCompare(b.fullname || '')) : [];
+
+        setSubjects(sortedSubjects);
+        setClasses(sortedClasses);
+        setTeachers(sortedTeachers);
+        setUserAccounts(sortedUserAccounts);
+        setActivities(sortedActivities);
+        setSchoolYears(sortedSchoolYears);
+        setStudents(sortedStudents);
         setError(null);
-        // Mặc định chọn năm học chứa ngày 2/12/2024
-        const defaultDate = new Date('2024-12-02');
-        let foundYear = schoolYearData.find(sy => {
-          const [startYear, endYear] = sy.year.split('-').map(Number);
-          const start = new Date(`${startYear}-09-02`);
-          const end = new Date(`${endYear}-05-31`);
-          return defaultDate >= start && defaultDate <= end;
-        });
+        
+        // Debug log
+        console.log('📊 Static data loaded:');
+        console.log('- Subjects:', sortedSubjects.length);
+        console.log('- Classes:', sortedClasses.length);
+        console.log('- Teachers:', sortedTeachers.length);
+        console.log('- Activities:', Array.isArray(sortedActivities) ? sortedActivities.length : 'NOT ARRAY', sortedActivities);
+        console.log('- School Years:', sortedSchoolYears.length);
+        // Mặc định chọn năm học 2024-2025
+        let foundYear = schoolYearData.find(sy => sy.year === '2024-2025');
         if (!foundYear && schoolYearData.length > 0) foundYear = schoolYearData[0];
         setSelectedSchoolYear(foundYear?.schoolyearid || null);
       } catch (err) {
-        setError('Không thể tải dữ liệu. Vui lòng thử lại sau.');
+        console.error('Fetch error:', err);
+        if (err.message.includes('401')) {
+          localStorage.removeItem('token');
+          setError('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+          toast.error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+        } else {
+          setError('Không thể tải dữ liệu. Vui lòng thử lại sau: ' + err.message);
+          toast.error('Không thể tải dữ liệu. Vui lòng thử lại sau.');
+        }
       } finally {
         setLoading(false);
       }
     };
+    
     fetchStaticData();
   }, []);
 
@@ -257,12 +447,9 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
     const sy = schoolYears.find(sy => sy.schoolyearid === selectedSchoolYear);
     const genWeeks = generateWeeksForSchoolYear(sy);
     setWeeks(genWeeks);
-    // Mặc định chọn tuần chứa 2/12/2024 nếu có, không thì tuần đầu tiên
-    const defaultDate = new Date('2024-12-02');
+    // Mặc định chọn tuần từ 2/12/2024 đến 8/12/2024
     let foundWeek = genWeeks.find(w => {
-      const start = new Date(w.start);
-      const end = new Date(w.end);
-      return defaultDate >= start && defaultDate <= end;
+      return w.start === '2024-12-02' && w.end === '2024-12-08';
     });
     if (!foundWeek && genWeeks.length > 0) foundWeek = genWeeks[0];
     setSelectedWeek(foundWeek || null);
@@ -274,18 +461,64 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
     setPeriodsLoading(true);
     setPeriodsError(null);
     try {
-      // Lấy periods cho tuần và lớp hiện tại
-      const classIds = selectedClass === 'all' ? classes.map(c => c.classid) : [Number(selectedClass)];
-      const promises = classIds.map(clsId =>
-        fetch(`${API_URL}/api/periods/by-range-class?startDate=${selectedWeek.start}&endDate=${selectedWeek.end}&classId=${clsId}&page=1&pageSize=50`)
-      );
-      const results = await Promise.all(promises);
-      const jsons = await Promise.all(results.map(r => r.ok ? r.json() : { items: [] }));
-      const allSections = jsons.flatMap(j => Array.isArray(j.items) ? j.items : []);
-      setSections(allSections);
+      // Kiểm tra token
+      const token = getTokenFromStorage();
+      if (!token) {
+        setPeriodsError('Không tìm thấy token xác thực. Vui lòng đăng nhập lại.');
+        toast.error('Vui lòng đăng nhập lại');
+        return;
+      }
+
+      // Lấy periods cho tuần hiện tại với API mới (single call thay vì multiple calls)
+      let apiUrl = `${API_URL}/api/periods?startDate=${selectedWeek.start}&endDate=${selectedWeek.end}&page=1&pageSize=100`;
+      
+      // Nếu không phải "all" thì thêm classId filter
+      if (selectedClass !== 'all') {
+        apiUrl += `&classId=${selectedClass}`;
+      }
+
+      const response = await fetch(apiUrl, {
+        headers: getAuthHeaders()
+      });
+
+      // Kiểm tra lỗi 401
+      if (response.status === 401) {
+        localStorage.removeItem('token');
+        setPeriodsError('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+        toast.error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! Status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const periodsData = Array.isArray(data.items) ? data.items : [];
+      
+      // Sort periods theo ngày và tiết
+      const sortedPeriodsData = periodsData.sort((a, b) => {
+        // Sort theo ngày trước
+        const dateA = new Date(a.perioddate);
+        const dateB = new Date(b.perioddate);
+        if (dateA.getTime() !== dateB.getTime()) {
+          return dateA.getTime() - dateB.getTime();
+        }
+        // Nếu cùng ngày thì sort theo tiết
+        return (a.periodno || a.period || 0) - (b.periodno || b.period || 0);
+      });
+      
+      setSections(sortedPeriodsData);
     } catch (err) {
+      console.error('Periods fetch error:', err);
       setSections([]);
-      setPeriodsError('Không thể tải dữ liệu tiết học cho tuần này.');
+      if (err.message.includes('401')) {
+        localStorage.removeItem('token');
+        setPeriodsError('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+        toast.error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+      } else {
+        setPeriodsError('Không thể tải dữ liệu tiết học cho tuần này: ' + err.message);
+      }
     } finally {
       setPeriodsLoading(false);
     }
@@ -296,24 +529,104 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
     fetchPeriodsForCurrentWeek();
   }, [fetchPeriodsForCurrentWeek]);
 
-  // Fetch evaluations cho tất cả period trong tuần khi selectedWeek thay đổi
+  // Fetch evaluations cho các period IDs trong tuần khi sections hoặc selectedClass thay đổi
   useEffect(() => {
-    if (!selectedWeek) return;
-    const fetchEvaluations = async () => {
+    if (!sections.length) return;
+    
+    const fetchEvaluationsForPeriods = async () => {
       try {
-        const res = await fetch(`${API_URL}/api/evaluations/by-date-range?startDate=${selectedWeek.start}&endDate=${selectedWeek.end}&page=1&pageSize=500`);
+        // Kiểm tra token
+        const token = getTokenFromStorage();
+        if (!token) {
+          setEvaluations([]);
+          return;
+        }
+
+        // Lấy tất cả period IDs từ sections trong tuần hiện tại
+        let periodIds = sections.map(section => section.periodid).filter(id => id);
+        
+        // Nếu chọn lớp cụ thể thì chỉ lấy period IDs của lớp đó
+        if (selectedClass !== 'all') {
+          periodIds = sections
+            .filter(section => Number(section.classid) === Number(selectedClass))
+            .map(section => section.periodid)
+            .filter(id => id);
+        }
+        
+        // Nếu không có period IDs thì không cần gọi API
+        if (periodIds.length === 0) {
+          setEvaluations([]);
+          return;
+        }
+
+        // Gọi API với PeriodIds để chỉ lấy evaluations cho các tiết học trong tuần
+        const params = new URLSearchParams();
+        params.append('page', '1');
+        params.append('pageSize', '1000');
+        
+        // Truyền nhiều PeriodId (API mới hỗ trợ multiple period IDs)
+        periodIds.forEach(periodId => {
+          params.append('PeriodId', periodId);
+        });
+
+        const apiUrl = `${API_URL}/api/evaluations?${params.toString()}`;
+        console.log('🔍 Fetching evaluations for periods:', periodIds);
+        console.log('🔗 API URL:', apiUrl);
+
+        const res = await fetch(apiUrl, {
+          headers: getAuthHeaders()
+        });
+
+        // Kiểm tra lỗi 401
+        if (res.status === 401) {
+          localStorage.removeItem('token');
+          setEvaluations([]);
+          toast.error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+          return;
+        }
+
         if (!res.ok) {
           setEvaluations([]);
           return;
         }
+        
         const data = await res.json();
-        setEvaluations(Array.isArray(data.items) ? data.items : []);
-      } catch {
+        console.log('📦 Raw API response:', data);
+        
+        // Try different possible data structures
+        let evaluationsData = [];
+        if (Array.isArray(data.items)) {
+          evaluationsData = data.items;
+          console.log('✅ Using data.items structure');
+        } else if (Array.isArray(data)) {
+          evaluationsData = data;
+          console.log('✅ Using direct array structure');
+        } else if (data.evaluations && Array.isArray(data.evaluations)) {
+          evaluationsData = data.evaluations;
+          console.log('✅ Using data.evaluations structure');
+        } else {
+          console.log('❌ Unknown data structure:', Object.keys(data));
+        }
+        
+        console.log('📊 Evaluations loaded for', periodIds.length, 'periods:', evaluationsData.length);
+        if (evaluationsData.length > 0) {
+          console.log('📋 Sample evaluation:', evaluationsData[0]);
+        }
+        
+        // Backend đã sort nên không cần sort lại ở frontend
+        setEvaluations(evaluationsData);
+      } catch (err) {
+        console.error('Evaluations fetch error:', err);
+        if (err.message.includes('401')) {
+          localStorage.removeItem('token');
+          toast.error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+        }
         setEvaluations([]);
       }
     };
-    fetchEvaluations();
-  }, [selectedWeek]);
+    
+    fetchEvaluationsForPeriods();
+  }, [sections, selectedClass]); // Dependency vào sections và selectedClass
 
   // Helper lấy tên môn học từ subjectid
   const getSubjectNameById = useCallback((subjectid) => {
@@ -332,12 +645,39 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
 
   // Helper lấy evaluations cho 1 tiết học
   const getEvaluationsForPeriod = useCallback((classid, periodno, date) => {
+    if (!evaluations.length) return [];
+    
     const dateStr = new Date(date).toISOString().split('T')[0];
-    return evaluations.filter(e =>
-      Number(e.classid) === Number(classid) &&
-      Number(e.periodno) === Number(periodno) &&
-      e.perioddate && e.perioddate.split('T')[0] === dateStr
-    );
+    
+    // Thử nhiều cách match khác nhau vì structure có thể khác
+    const result = evaluations.filter(e => {
+      // Match classid - API mới có thể dùng classId hoặc classid
+      const classMatch = Number(e.classId) === Number(classid) || 
+                         Number(e.classid) === Number(classid) || 
+                         Number(e.ClassId) === Number(classid);
+      
+      // Match periodno - API mới có thể dùng periodNo hoặc periodno
+      const periodMatch = Number(e.periodNo) === Number(periodno) || 
+                          Number(e.periodno) === Number(periodno) ||
+                          Number(e.PeriodNo) === Number(periodno) ||
+                          Number(e.period) === Number(periodno);
+      
+      // Match date - API mới có thể dùng createdAt hoặc các field khác
+      let dateMatch = false;
+      if (e.createdAt) {
+        dateMatch = e.createdAt.split('T')[0] === dateStr;
+      } else if (e.createdat) {
+        dateMatch = e.createdat.split('T')[0] === dateStr;
+      } else if (e.perioddate) {
+        dateMatch = e.perioddate.split('T')[0] === dateStr;
+      } else if (e.PeriodDate) {
+        dateMatch = e.PeriodDate.split('T')[0] === dateStr;
+      }
+      
+      return classMatch && periodMatch && dateMatch;
+    });
+    
+    return result;
   }, [evaluations]);
 
   const getSubjectName = useCallback((subjectid) => {
@@ -433,6 +773,13 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
       return;
     }
 
+    // Kiểm tra token
+    const token = getTokenFromStorage();
+    if (!token) {
+      toast.error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+      return;
+    }
+
     const excludePeriodId = isEditMode ? getSectionForCell(selectedCell.classId, selectedCell.periodNo, selectedCell.date)?.periodid : null;
     const conflicts = checkScheduleConflict(
       selectedCell.classId, 
@@ -494,11 +841,18 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
       const res = await fetch(url, {
         method,
         headers: { 
-          'Content-Type': 'application/json',
+          ...getAuthHeaders(),
           'Accept': 'application/json'
         },
         body: JSON.stringify(body)
       });
+
+      // Kiểm tra lỗi 401
+      if (res.status === 401) {
+        localStorage.removeItem('token');
+        toast.error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+        return;
+      }
 
       const responseText = await res.text();
       console.log('API Response:', responseText);
@@ -523,7 +877,12 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
       toast.success(`${isEditMode ? 'Sửa' : 'Thêm'} tiết học thành công!`);
     } catch (err) {
       console.error('API Error:', err);
-      toast.error(err.message || 'Có lỗi xảy ra, vui lòng thử lại');
+      if (err.message.includes('401') || err.status === 401) {
+        localStorage.removeItem('token');
+        toast.error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+      } else {
+        toast.error(err.message || 'Có lỗi xảy ra, vui lòng thử lại');
+      }
     } finally {
       setLoading(false);
     }
@@ -537,7 +896,26 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
   const confirmDelete = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`${API_URL}/api/periods/${sectionToDelete}`, { method: 'DELETE' });
+
+      // Kiểm tra token
+      const token = getTokenFromStorage();
+      if (!token) {
+        toast.error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+        return;
+      }
+
+      const res = await fetch(`${API_URL}/api/periods/${sectionToDelete}`, { 
+        method: 'DELETE',
+        headers: getAuthHeaders()
+      });
+
+      // Kiểm tra lỗi 401
+      if (res.status === 401) {
+        localStorage.removeItem('token');
+        toast.error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+        return;
+      }
+
       if (!res.ok) throw new Error('Xóa tiết học thất bại');
       // Reload periods tuần hiện tại
       await fetchPeriodsForCurrentWeek();
@@ -549,7 +927,13 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
       setIsEditMode(false);
       setSectionToDelete(null);
     } catch (err) {
-      toast.error(err.message);
+      console.error('Delete error:', err);
+      if (err.message.includes('401') || err.status === 401) {
+        localStorage.removeItem('token');
+        toast.error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+      } else {
+        toast.error(err.message || 'Có lỗi xảy ra khi xóa tiết học');
+      }
     } finally {
       setLoading(false);
     }
@@ -582,21 +966,93 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
     // Kiểm tra và hiển thị thông tin môn học và giáo viên
     const subjectName = section ? getSubjectNameById(section.subjectid) : '-';
     const teacherFullname = section ? getTeacherFullnameById(section.teacherid) : '-';
-    const evals = section && evaluations.length > 0 ? evaluations.filter(e => e.periodid === section.periodid) : [];
+    // Lấy evaluations cho tiết học này - ưu tiên match theo periodId
+    let evals = [];
+    if (section) {
+      // Cách 1: Match theo periodId (chính xác nhất)
+      evals = getEvaluationsForSection(section.periodid);
+      
+      // Cách 2: Nếu không có, thử match theo classId + periodno + date (backup)
+      if (evals.length === 0) {
+        evals = getEvaluationsForPeriod(classId, periodNo, date);
+        if (evals.length > 0) {
+          console.log(`🔄 Fallback match found ${evals.length} evaluations for classId=${classId}, periodNo=${periodNo}, date=${date}`);
+        }
+      }
+      
+      // Debug log for cells with evaluations only
+      if (section.periodid && evals.length > 0) {
+        console.log(`✅ Cell has ${evals.length} evaluations: periodId=${section.periodid}, class=${classId}, period=${periodNo}`);
+      }
+    }
+    
+    // Phân loại evaluations theo tích cực/tiêu cực
+    const positiveEvals = evals.filter(e => {
+      // API mới có thể đã include activity info trong evaluation response
+      if (e.activity && typeof e.activity === 'object') {
+        return !e.activity.isNegative;
+      }
+      // Fallback: tìm trong activities array nếu có
+      if (Array.isArray(activities) && e.activityid) {
+        const activity = activities.find(act => act.activityid === e.activityid);
+        return !activity?.isnegative;
+      }
+      // Default: assume positive if no activity info
+      return true;
+    });
+    const negativeEvals = evals.filter(e => {
+      // API mới có thể đã include activity info trong evaluation response
+      if (e.activity && typeof e.activity === 'object') {
+        return e.activity.isNegative;
+      }
+      // Fallback: tìm trong activities array nếu có
+      if (Array.isArray(activities) && e.activityid) {
+        const activity = activities.find(act => act.activityid === e.activityid);
+        return activity?.isnegative;
+      }
+      // Default: assume not negative if no activity info
+      return false;
+    });
 
     return (
       <div 
-        className={`h-20 border border-gray-200 ${isPast ? 'bg-yellow-50 hover:bg-yellow-100' : 'bg-blue-50 hover:bg-blue-100'} cursor-pointer p-2 flex flex-col justify-center`}
+        className={`h-20 border border-gray-200 ${isPast ? 'bg-yellow-50 hover:bg-yellow-100' : 'bg-blue-50 hover:bg-blue-100'} cursor-pointer p-1 flex flex-col justify-between`}
         onClick={() => handleCellClick(classId, periodNo, date)}
       >
-        <div className={`text-xs font-medium ${isPast ? 'text-yellow-800' : 'text-blue-800'}`}>
-          {subjectName !== '-' ? 'Môn học: ' + subjectName : 'Chưa có môn học'}
+        <div className="flex-1">
+          <div className={`text-xs font-medium ${isPast ? 'text-yellow-800' : 'text-blue-800'} truncate`}>
+            Môn học: {subjectName !== '-' ? subjectName : 'Chưa có môn'}
+          </div>
+          <div className={`text-xs ${isPast ? 'text-yellow-600' : 'text-blue-600'} truncate`}>
+          Giáo viên: {teacherFullname !== '-' ? teacherFullname : 'Chưa có GV'}
+          </div>
         </div>
-        <div className={`text-xs ${isPast ? 'text-yellow-600' : 'text-blue-600'}`}>
-          {teacherFullname !== '-' ? 'Giáo viên: ' + teacherFullname : 'Chưa có giáo viên'}
-        </div>
-        <div className={`text-xs font-medium mt-1 ${evals.length > 0 ? 'text-green-600' : 'text-gray-500'}`}>
-          {evals.length > 0 ? `Có ${evals.length} đánh giá` : 'Chưa có đánh giá'}
+        
+        {/* Hiển thị thông tin đánh giá */}
+        <div className="text-xs">
+          {evals.length > 0 ? (
+            <div className="flex justify-between items-center">
+              <div className="flex gap-1">
+                {positiveEvals.length > 0 && (
+                  <span className="bg-green-100 text-green-700 px-1 rounded text-xs">
+                    +{positiveEvals.length}
+                  </span>
+                )}
+                {negativeEvals.length > 0 && (
+                  <span className="bg-red-100 text-red-700 px-1 rounded text-xs">
+                    -{negativeEvals.length}
+                  </span>
+                )}
+              </div>
+              <span className="text-gray-600 font-medium">
+                Có {evals.length} đánh giá
+              </span>
+            </div>
+          ) : (
+            <div className="text-gray-500 text-center">
+              Chưa có đánh giá
+            </div>
+          )}
         </div>
       </div>
     );
@@ -676,7 +1132,32 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
             <p className="mt-4 text-gray-600">Đang tải dữ liệu...</p>
           </div>
         ) : periodsError ? (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-600">{periodsError}</div>
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+            <div className="flex">
+              <div className="flex-shrink-0">
+                <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <h3 className="text-sm font-medium text-red-800">Lỗi tải dữ liệu</h3>
+                <p className="mt-1 text-sm text-red-600">{periodsError}</p>
+                {periodsError.includes('token') && (
+                  <div className="mt-3">
+                    <button 
+                      onClick={() => {
+                        localStorage.clear();
+                        window.location.reload();
+                      }}
+                      className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-red-700 bg-red-100 hover:bg-red-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                    >
+                      Đăng nhập lại
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full border border-gray-300">
@@ -761,50 +1242,144 @@ const SessionManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
               <p>Ngày: {new Date(selectedCell.date).toLocaleDateString('vi-VN')}</p>
             </div>
 
-            {/* Hiển thị đánh giá nếu là tiết học đã qua */}
-            {isEditMode && isDateInPast(selectedCell.date) && (
+            {/* Hiển thị đánh giá cho tất cả tiết học (cả quá khứ và tương lai) */}
+            {isEditMode && (
               <div className="mb-6">
                 <h4 className="text-lg font-semibold mb-3 text-gray-800">Đánh giá tiết học</h4>
                 {(() => {
                   const section = getSectionForCell(selectedCell.classId, selectedCell.periodNo, selectedCell.date);
+                  // Sử dụng evaluations có sẵn từ state
                   const sectionEvaluations = section ? getEvaluationsForSection(section.periodid) : [];
                   
                   if (sectionEvaluations.length === 0) {
                     return (
                       <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-gray-500">
-                        Chưa có đánh giá nào cho tiết học này.
+                        <div className="flex items-center justify-between">
+                          <span>Chưa có đánh giá nào cho tiết học này.</span>
+                          {section && (
+                            <button 
+                              onClick={async () => {
+                                // Refresh evaluations cho period này
+                                const params = new URLSearchParams();
+                                params.append('PeriodId', section.periodid);
+                                params.append('page', '1');
+                                params.append('pageSize', '100');
+                                
+                                try {
+                                  const res = await fetch(`${API_URL}/api/evaluations?${params.toString()}`, {
+                                    headers: getAuthHeaders()
+                                  });
+                                  if (res.ok) {
+                                    const data = await res.json();
+                                    const newEvals = Array.isArray(data.items) ? data.items : [];
+                                    
+                                    // Cập nhật state evaluations
+                                    setEvaluations(prev => {
+                                      // Remove old evaluations for this period
+                                      const filtered = prev.filter(e => {
+                                        const evalPeriodId = e.periodid || e.PeriodId || e.periodId;
+                                        return Number(evalPeriodId) !== Number(section.periodid);
+                                      });
+                                      // Add new evaluations
+                                      return [...filtered, ...newEvals];
+                                    });
+                                    
+                                    toast.success(`Đã tải lại ${newEvals.length} đánh giá cho tiết học này`);
+                                  } else {
+                                    toast.info('Không có đánh giá mới nào');
+                                  }
+                                } catch (err) {
+                                  toast.error('Lỗi khi tải lại đánh giá');
+                                }
+                              }}
+                              className="text-blue-600 hover:text-blue-800 underline text-sm px-2 py-1"
+                            >
+                              🔄 Tải lại
+                            </button>
+                          )}
+                        </div>
                       </div>
                     );
                   }
 
+                  // Phân loại đánh giá
+                  const positiveEvaluations = sectionEvaluations.filter(e => {
+                    // API mới có thể đã include activity info trong evaluation response
+                    if (e.activity && typeof e.activity === 'object') {
+                      return !e.activity.isNegative;
+                    }
+                    // Fallback: tìm trong activities array nếu có
+                    if (Array.isArray(activities) && e.activityid) {
+                      const activity = activities.find(act => act.activityid === e.activityid);
+                      return !activity?.isnegative;
+                    }
+                    return true; // default positive
+                  });
+                  
+                  const negativeEvaluations = sectionEvaluations.filter(e => {
+                    // API mới có thể đã include activity info trong evaluation response
+                    if (e.activity && typeof e.activity === 'object') {
+                      return e.activity.isNegative;
+                    }
+                    // Fallback: tìm trong activities array nếu có
+                    if (Array.isArray(activities) && e.activityid) {
+                      const activity = activities.find(act => act.activityid === e.activityid);
+                      return activity?.isnegative;
+                    }
+                    return false; // default not negative
+                  });
+
                   return (
-                    <div className="space-y-3">
-                      {sectionEvaluations.map((evaluation, idx) => (
-                        <div key={evaluation.evaluationid} className="bg-white border border-gray-200 rounded-lg p-4">
-                          <div className="flex justify-between items-start mb-2">
-                            <div className="flex items-center gap-2">
-                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                getEvaluationType(evaluation) === 'negative' 
-                                  ? 'bg-red-100 text-red-800' 
-                                  : 'bg-green-100 text-green-800'
-                              }`}>
-                                {getEvaluationType(evaluation) === 'negative' ? 'Tiêu cực' : 'Tích cực'}
-                              </span>
-                              <span className="text-sm text-gray-500">
-                                {new Date(evaluation.createdat).toLocaleString('vi-VN')}
-                              </span>
-                            </div>
-                          </div>
-                          <div className="text-sm text-gray-800 mb-3 whitespace-pre-line">
-                            {evaluation.content}
-                          </div>
-                          {evaluation.students && evaluation.students.length > 0 && (
-                            <div className="text-sm text-gray-600">
-                              <strong>Học sinh:</strong> {getStudentNames(evaluation)}
-                            </div>
-                          )}
+                    <div className="space-y-4">
+                      {/* Thống kê tóm tắt */}
+                      <div className="flex gap-4 mb-4">
+                        <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex-1">
+                          <div className="text-green-800 font-semibold">Đánh giá tích cực</div>
+                          <div className="text-2xl font-bold text-green-600">{positiveEvaluations.length}</div>
                         </div>
-                      ))}
+                        <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex-1">
+                          <div className="text-red-800 font-semibold">Đánh giá tiêu cực</div>
+                          <div className="text-2xl font-bold text-red-600">{negativeEvaluations.length}</div>
+                        </div>
+                      </div>
+
+                      {/* Danh sách chi tiết đánh giá */}
+                      <div className="max-h-96 overflow-y-auto space-y-3">
+                        {sectionEvaluations.map((evaluation, idx) => {
+                          const isNegative = getEvaluationType(evaluation) === 'negative';
+                          return (
+                            <div 
+                              key={evaluation.evaluationId || evaluation.evaluationid || idx} 
+                              className={`border rounded-lg p-4 ${
+                                isNegative ? 'bg-red-50 border-red-200' : 'bg-green-50 border-green-200'
+                              }`}
+                            >
+                              <div className="flex justify-between items-start mb-2">
+                                <div className="flex items-center gap-2">
+                                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                    isNegative 
+                                      ? 'bg-red-100 text-red-800' 
+                                      : 'bg-green-100 text-green-800'
+                                  }`}>
+                                    {isNegative ? 'Tiêu cực' : 'Tích cực'}
+                                  </span>
+                                  <span className="text-sm text-gray-500">
+                                    {new Date(evaluation.createdAt || evaluation.createdat).toLocaleString('vi-VN')}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="text-sm text-gray-800 mb-3 whitespace-pre-line">
+                                {evaluation.content}
+                              </div>
+                              {evaluation.students && evaluation.students.length > 0 && (
+                                <div className="text-sm text-gray-600">
+                                  <strong>Học sinh ({evaluation.students.length}):</strong> {getStudentNames(evaluation)}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   );
                 })()}

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import API_URL from '../../config/api';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import { getTokenFromStorage, getAuthHeaders } from '../../utils/auth';
 
 const SchoolYearManagement = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) => {
   const [schoolYears, setSchoolYears] = useState([]);
@@ -13,7 +14,31 @@ const SchoolYearManagement = ({ user, active, setActive, isSidebarOpen, setSideb
   const fetchData = async () => {
     try {
       setLoading(true);
-      const schoolYearRes = await fetch(`${API_URL}/api/school-years`);
+      
+      // Kiểm tra token trước khi gọi API
+      const token = getTokenFromStorage();
+      if (!token) {
+        setError('Không tìm thấy token xác thực. Vui lòng đăng nhập lại.');
+        toast.error('Vui lòng đăng nhập lại');
+        return;
+      }
+
+      const schoolYearRes = await fetch(`${API_URL}/api/school-years`, {
+        headers: getAuthHeaders()
+      });
+
+      // Kiểm tra lỗi 401
+      if (schoolYearRes.status === 401) {
+        localStorage.removeItem('token');
+        setError('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+        toast.error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+        return;
+      }
+
+      if (!schoolYearRes.ok) {
+        throw new Error(`HTTP error! Status: ${schoolYearRes.status}`);
+      }
+
       const schoolYearData = await schoolYearRes.json();
       setSchoolYears(schoolYearData);
 
@@ -28,24 +53,53 @@ const SchoolYearManagement = ({ user, active, setActive, isSidebarOpen, setSideb
 
       setError(null);
     } catch (error) {
-      console.error(error);
-      toast.error('Có lỗi xảy ra khi tải dữ liệu: ' + error.message);
+      console.error('Fetch error:', error);
+      if (error.message.includes('401')) {
+        localStorage.removeItem('token');
+        setError('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+        toast.error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+      } else {
+        setError('Có lỗi xảy ra khi tải dữ liệu: ' + error.message);
+        toast.error('Có lỗi xảy ra khi tải dữ liệu: ' + error.message);
+      }
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
+    const token = getTokenFromStorage();
+    
+    if (!token) {
+      setError('Không tìm thấy token xác thực. Vui lòng đăng nhập lại.');
+      setLoading(false);
+      return;
+    }
+    
     fetchData();
   }, []);
 
   const handleSubmit = async () => {
     try {
+      const token = getTokenFromStorage();
+      if (!token) {
+        toast.error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+        return;
+      }
+
       const response = await fetch(`${API_URL}/api/SchoolYear`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ year: nextSchoolYear })
       });
+
+      // Kiểm tra lỗi 401
+      if (response.status === 401) {
+        localStorage.removeItem('token');
+        toast.error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+        return;
+      }
+
       if (response.ok) {
         await fetchData();
         setShowConfirmModal(false);
@@ -55,8 +109,13 @@ const SchoolYearManagement = ({ user, active, setActive, isSidebarOpen, setSideb
         toast.error('Có lỗi xảy ra khi thêm năm học: ' + errorText);
       }
     } catch (error) {
-      console.error(error);
-      toast.error('Có lỗi xảy ra khi lưu năm học.');
+      console.error('Submit error:', error);
+      if (error.message.includes('401') || error.status === 401) {
+        localStorage.removeItem('token');
+        toast.error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+      } else {
+        toast.error('Có lỗi xảy ra khi lưu năm học: ' + error.message);
+      }
     }
   };
 
@@ -76,7 +135,32 @@ const SchoolYearManagement = ({ user, active, setActive, isSidebarOpen, setSideb
             <p className="mt-4 text-gray-600">Đang tải danh sách năm học...</p>
           </div>
         ) : error ? (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-600">{error}</div>
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+            <div className="flex">
+              <div className="flex-shrink-0">
+                <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <h3 className="text-sm font-medium text-red-800">Lỗi xác thực</h3>
+                <p className="mt-1 text-sm text-red-600">{error}</p>
+                {error.includes('token') && (
+                  <div className="mt-3">
+                    <button 
+                      onClick={() => {
+                        localStorage.clear();
+                        window.location.reload();
+                      }}
+                      className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-red-700 bg-red-100 hover:bg-red-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                    >
+                      Đăng nhập lại
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">

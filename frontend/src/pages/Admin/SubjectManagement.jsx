@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import API_URL from '../../config/api';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import { getTokenFromStorage, getAuthHeaders } from '../../utils/auth';
 
 const SubjectManagement = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) => {
   const [subjects, setSubjects] = useState([]);
@@ -15,11 +16,7 @@ const SubjectManagement = ({ user, active, setActive, isSidebarOpen, setSidebarO
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [subjectToDelete, setSubjectToDelete] = useState(null);
 
-  // Helper lấy token từ localStorage
-  const getAuthHeaders = () => {
-    const token = localStorage.getItem('token');
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  };
+
 
   const fetchData = async () => {
     try {

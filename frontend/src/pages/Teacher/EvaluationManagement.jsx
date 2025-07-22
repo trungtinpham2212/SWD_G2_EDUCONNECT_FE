@@ -3,6 +3,7 @@ import API_URL from '../../config/api';
 import { useLocation } from 'react-router-dom';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import { getTokenFromStorage, getAuthHeaders } from '../../utils/auth';
 
 const ITEMS_PER_PAGE = 10;
 
@@ -85,11 +86,7 @@ const EvaluationManagement = ({ user, active, setActive, isSidebarOpen, setSideb
   // Thêm state cho subjects
   const [subjects, setSubjects] = useState([]);
 
-  // Helper lấy token từ localStorage
-  const getAuthHeaders = () => {
-    const token = localStorage.getItem('token');
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  };
+
 
   // Fetch tất cả evaluations của giáo viên khi user?.teacherId thay đổi
   useEffect(() => {

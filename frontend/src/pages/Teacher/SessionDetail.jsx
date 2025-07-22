@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import API_URL from '../../config/api';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import { getTokenFromStorage, getAuthHeaders } from '../../utils/auth';
 
 // --- Helper Components for UI ---
 
@@ -56,11 +57,7 @@ const StudentsIcon = (props) => (
   </svg>
 );
 
-// Helper lấy token từ localStorage
-const getAuthHeaders = () => {
-  const token = localStorage.getItem('token');
-  return token ? { Authorization: `Bearer ${token}` } : {};
-};
+
 
 const SessionDetail = () => {
   const { sessionid } = useParams();

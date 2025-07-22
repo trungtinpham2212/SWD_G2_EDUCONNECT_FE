@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { FaCalendarAlt, FaChevronLeft, FaChevronRight } from 'react-icons/fa';
 import API_URL from '../../config/api';
 import { useNavigate } from 'react-router-dom';
+import { getTokenFromStorage, getAuthHeaders } from '../../utils/auth';
 
 const Schedule = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) => {
   const [periods, setperiods] = useState([]);
@@ -28,11 +29,7 @@ const Schedule = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) =>
     { period: 8, start: '16:00', end: '16:45' }
   ];
 
-  // Helper lấy token từ localStorage
-  const getAuthHeaders = () => {
-    const token = localStorage.getItem('token');
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  };
+
 
   // Fetch school years
   useEffect(() => {

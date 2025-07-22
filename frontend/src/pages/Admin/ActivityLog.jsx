@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import API_URL from '../../config/api';
+import { getTokenFromStorage, getAuthHeaders } from '../../utils/auth';
 
 const ITEMS_PER_PAGE = 20;
 
@@ -35,11 +36,7 @@ const ActivityLog = ({ user, active, setActive, isSidebarOpen, setSidebarOpen })
   const [allLogs, setAllLogs] = useState([]);
   const [isFetchingAll, setIsFetchingAll] = useState(false);
 
-  // Helper lấy token từ localStorage
-  const getAuthHeaders = () => {
-    const token = localStorage.getItem('token');
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  };
+
 
   useEffect(() => {
     const fetchData = async () => {

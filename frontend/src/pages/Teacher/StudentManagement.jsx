@@ -1,12 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { FaSearch, FaUserGraduate, FaBirthdayCake, FaUserFriends } from 'react-icons/fa';
 import API_URL from '../../config/api';
+import { getTokenFromStorage, getAuthHeaders } from '../../utils/auth';
 
-// Helper lấy token từ localStorage
-const getAuthHeaders = () => {
-  const token = localStorage.getItem('token');
-  return token ? { Authorization: `Bearer ${token}` } : {};
-};
+
 
 const StudentManagement = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) => {
   const ITEMS_PER_PAGE = 15;
