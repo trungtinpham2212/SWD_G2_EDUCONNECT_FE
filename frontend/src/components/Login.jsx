@@ -213,7 +213,7 @@ const Login = ({ setUser }) => {
           </form>
 
           <div className="text-center text-sm">
-            <a href="#" className="font-medium text-blue-600 hover:text-blue-500">
+            <a href="/reset-password" className="font-medium text-blue-600 hover:text-blue-500">
               Quên mật khẩu?
             </a>
           </div>

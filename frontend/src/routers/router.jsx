@@ -25,6 +25,7 @@ import ReportTeacher from '../pages/Teacher/ReportManagement';
 import ParentSetting from '../pages/Parent/ParentSetting';
 import Chatbot from '../pages/Parent/Chatbot';
 import ReportGroupDetail from '../pages/Teacher/ReportGroupDetail';
+import ResetPassword from "../components/ResetPassword";
 // Dynamic Dashboard component that renders based on user role
 const DynamicDashboard = ({ user, ...props }) => {
   if (!user) return null;
@@ -268,6 +269,10 @@ export const createRoutes = ({ user, active, setActive, isSidebarOpen, setSideba
         allowedRoles={[3]}
         {...commonProps}
       />
+    },
+    {
+      path: "/reset-password",
+      element: <ResetPassword />
     },
     // Default route
     {
