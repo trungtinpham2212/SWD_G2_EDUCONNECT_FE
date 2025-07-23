@@ -126,7 +126,7 @@ const ReportManagement = ({ user }) => {
     try {
       const body = {
         teacherId: user.teacherId,
-        studentIds: selectedStudents,
+        studentIds: selectedStudents, // Đảm bảo là mảng số
         startDate: startDate,
         endDate: endDate
       };
@@ -145,12 +145,10 @@ const ReportManagement = ({ user }) => {
       setEndDate(dayjs().format('YYYY-MM-DD'));
       // Reload group list
       const teacherId = user?.teacherId || localStorage.getItem('teacherId');
-      // SỬA: dùng endpoint mới, thêm sortBy và sortOrder để mới nhất lên đầu
       const reload = await fetch(`${API_URL}/api/report-groups?teacherId=${teacherId}&page=1&pageSize=10&sortBy=createdAt&sortOrder=desc`, {
         headers: { ...getAuthHeaders() }
       });
       const reloadData = await reload.json();
-      // Sort lại chỉ theo createdAt khi reload
       const sortedReload = (reloadData.items || []).slice().sort((a, b) => {
         const dateA = new Date(a.createdat || a.createdAt || 0).getTime();
         const dateB = new Date(b.createdat || b.createdAt || 0).getTime();
@@ -237,7 +235,7 @@ const ReportManagement = ({ user }) => {
                   <label key={stu.studentid} className="flex items-center gap-2 mb-1 cursor-pointer">
                     <input type="checkbox" checked={selectedStudents.includes(stu.studentid)} onChange={()=>handleStudentToggle(stu.studentid)} />
                     <FaUserGraduate className="text-blue-500" />
-                    <span>{stu.name}</span>
+                    <span>{stu.studentName}</span>
                   </label>
                 ))}
               </div>

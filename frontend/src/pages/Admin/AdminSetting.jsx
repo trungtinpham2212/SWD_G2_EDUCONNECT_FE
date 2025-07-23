@@ -16,6 +16,7 @@ import {
   FaEye,
   FaEyeSlash,
 } from "react-icons/fa";
+import { getTokenFromStorage, getAuthHeaders, isAuthenticated } from '../../utils/auth';
 
 const AdminSetting = ({
   user,
@@ -85,11 +86,11 @@ const AdminSetting = ({
           email: data.email || "",
           phonenumber: data.phonenumber || "",
           address: data.address || "",
-          roleid: data.roleid,
+          roleid: data.roleid ?? data.RoleId ?? data.roleId,
           username: data.username,
           avatarurl: data.avatarurl || "",
         });
-        setAvatarUrl(data.avatarurl || "");
+        setAvatarUrl(data.avatarUrl || data.avatarurl || "");
         setAvatarRemoved(false); // Reset avatar removed state
       } catch (err) {
         toast.error("Không lấy được thông tin cá nhân");
@@ -227,7 +228,7 @@ const AdminSetting = ({
       const response = await fetch(`${API_URL}/api/user-accounts/${user.userId}`, {
         method: 'PUT',
         body: formData,
-        headers: getAuthHeaders().Authorization ? { Authorization: getAuthHeaders().Authorization } : undefined
+        headers: getAuthHeaders()
       });
       
       let text = await response.text();
@@ -298,11 +299,19 @@ const AdminSetting = ({
       }
       // Password: send empty string for profile update
       formData.append("password", "");
+      // Trước khi gửi request cập nhật profile, kiểm tra roleid
+      if (profileForm.roleid === undefined || profileForm.roleid === null || isNaN(Number(profileForm.roleid))) {
+        toast.error('Không xác định được vai trò (RoleId) của tài khoản.');
+        setIsUpdating(false);
+        return;
+      }
+      formData.append('RoleId', profileForm.roleid);
       const response = await fetch(
         `${API_URL}/api/user-accounts/${user.userId}`,
         {
           method: "PUT",
           body: formData,
+          headers: getAuthHeaders()
         }
       );
       let text = await response.text();
@@ -373,42 +382,31 @@ const AdminSetting = ({
       setUserToBan(null);
       return;
     }
+    // Kiểm tra đăng nhập
+    if (!isAuthenticated()) {
+      toast.error('Bạn chưa đăng nhập hoặc phiên đăng nhập đã hết hạn.');
+      setIsBanning(false);
+      setShowBanModal(false);
+      setUserToBan(null);
+      return;
+    }
     setIsBanning(true);
     try {
-      const banData = {
-        status: userToBan.action === "ban" ? false : true, // false for ban, true for unban
-      };
+      // Gọi API mới không cần body, chỉ cần id
       const response = await fetch(
-        `${API_URL}/api/user-accounts/${userToBan.userid}/ban-toggle`,
+        `${API_URL}/api/user-accounts/${userToBan.userid}/status`,
         {
           method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-          },
-          body: JSON.stringify(banData),
+          headers: getAuthHeaders()
         }
       );
-      let result;
-      const contentType = response.headers.get("content-type");
-      if (contentType && contentType.includes("application/json")) {
-        result = await response.json();
-      } else {
-        const text = await response.text();
-        result = { message: text };
-      }
-      if (
-        response.ok ||
-        result.message?.toLowerCase().includes("success") ||
-        result.message?.includes("Update successful")
-      ) {
-        const action = userToBan.action === "ban" ? "khóa" : "mở khóa";
+      if (response.ok) {
+        const action = userToBan.status ? "khóa" : "mở khóa";
         toast.success(`Đã ${action} tài khoản của ${userToBan.fullname}`);
         await fetchUserAccounts();
       } else {
-        toast.error(
-          "Lỗi khi thực hiện thao tác: " + (result.message || "Unknown error")
-        );
+        const text = await response.text();
+        toast.error("Lỗi khi thực hiện thao tác: " + text);
       }
     } catch (error) {
       console.error("Error banning/unbanning user:", error);

@@ -4,7 +4,7 @@ import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { getTokenFromStorage, getAuthHeaders } from '../../utils/auth';
 
-const ITEMS_PER_PAGE = 22;
+const ITEMS_PER_PAGE = 1200; //1 khối 10 lớp, 1 lớp 40 học sinh
 
 const ClassManagement = ({ user, active, setActive, isSidebarOpen, setSidebarOpen }) => {
   const [classes, setClasses] = useState([]);
@@ -79,8 +79,9 @@ const ClassManagement = ({ user, active, setActive, isSidebarOpen, setSidebarOpe
     return year ? year.year : '-';
   };
 
+  // Sửa hàm lấy học sinh của lớp để dùng schema mới
   const getStudentsOfClass = (classid) => {
-    return (Array.isArray(students) ? students : []).filter(stu => stu.classid === classid);
+    return (Array.isArray(students) ? students : []).filter(stu => stu.class && stu.class.classid === classid);
   };
 
   const handleShowStudents = (classid, classname) => {
@@ -300,7 +301,7 @@ const ClassManagement = ({ user, active, setActive, isSidebarOpen, setSidebarOpe
                     {modalStudents.map((stu, idx) => (
                       <tr key={stu.studentid}>
                         <td className="px-4 py-2 text-sm text-gray-500">{idx + 1}</td>
-                        <td className="px-4 py-2 text-sm text-gray-900">{stu.name}</td>
+                        <td className="px-4 py-2 text-sm text-gray-900">{stu.studentName}</td>
                       </tr>
                     ))}
                   </tbody>

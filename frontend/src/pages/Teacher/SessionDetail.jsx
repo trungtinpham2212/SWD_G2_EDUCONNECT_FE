@@ -296,35 +296,32 @@ const SessionDetail = () => {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {students.map((stu, idx) => {
-                      const parent = parentAccounts.find(acc => acc.userid === stu.parentid);
-                      return (
-                        <tr key={stu.studentid} className="hover:bg-gray-50 transition-colors">
-                          <td className="px-6 py-4 text-center">
-                            <input
-                              type="checkbox"
-                              checked={selectedStudents.includes(stu.studentid)}
-                              onChange={(e) => handleSelectStudent(stu.studentid, e.target.checked)}
-                              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                            />
-                          </td>
-                          <td className="px-6 py-4 text-sm text-gray-500">{idx + 1}</td>
-                          <td className="px-6 py-4 text-sm font-semibold text-gray-900">{stu.name}</td>
-                          <td className="px-6 py-4 text-sm text-gray-700">{new Date(stu.dateofbirth).toLocaleDateString('vi-VN')}</td>
-                          <td className="px-6 py-4 text-sm text-gray-700">
-                            {parent ? (
-                              <div>
-                                <div className="font-semibold text-gray-900">{parent.fullname}</div>
-                                <div className="text-xs">{parent.email || ''}</div>
-                                <div className="text-xs">{parent.phonenumber || ''}</div>
-                              </div>
-                            ) : (
-                              <span className="text-xs text-gray-400 italic">Chưa có thông tin</span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
+                    {students.map((stu, idx) => (
+                      <tr key={stu.studentid} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-6 py-4 text-center">
+                          <input
+                            type="checkbox"
+                            checked={selectedStudents.includes(stu.studentid)}
+                            onChange={(e) => handleSelectStudent(stu.studentid, e.target.checked)}
+                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          />
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-500">{idx + 1}</td>
+                        <td className="px-6 py-4 text-sm font-semibold text-gray-900">{stu.studentName}</td>
+                        <td className="px-6 py-4 text-sm text-gray-700">{new Date(stu.dateofbirth).toLocaleDateString('vi-VN')}</td>
+                        <td className="px-6 py-4 text-sm text-gray-700">
+                          {stu.parent ? (
+                            <div>
+                              <div className="font-semibold text-gray-900">{stu.parent.fullname}</div>
+                              <div className="text-xs">{stu.parent.email || ''}</div>
+                              <div className="text-xs">{stu.parent.phonenumber || ''}</div>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-gray-400 italic">Chưa có thông tin</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>

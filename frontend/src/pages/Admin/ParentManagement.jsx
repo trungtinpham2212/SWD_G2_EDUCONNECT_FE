@@ -36,7 +36,7 @@ const ParentManagement = ({ user, active, setActive, isSidebarOpen, setSidebarOp
       setLoading(true);
       const [userRes, studentRes, classRes] = await Promise.all([
         fetch(`${API_URL}/api/user-accounts`, { headers: getAuthHeaders() }),
-        fetch(`${API_URL}/api/students?page=1&pageSize=${ITEMS_PER_PAGE}`, { headers: getAuthHeaders() }),
+        fetch(`${API_URL}/api/students?page=1&pageSize=300`, { headers: getAuthHeaders() }),
         fetch(`${API_URL}/api/classes?page=1&pageSize=${ITEMS_PER_PAGE}`, { headers: getAuthHeaders() })
       ]);
       const userData = await userRes.json();
@@ -57,8 +57,11 @@ const ParentManagement = ({ user, active, setActive, isSidebarOpen, setSidebarOp
     fetchData();
   }, []);
 
+  // Sửa hàm getChildren để lấy học sinh dựa vào student.parent.userId === parent.userid
   const getChildren = (parentid) => {
-    return (Array.isArray(students) ? students : []).filter(stu => stu.parentid === parentid);
+    return (Array.isArray(students) ? students : []).filter(
+      stu => stu.parent && stu.parent.userId === parentid
+    );
   };
 
   const getClassName = (classid) => {
@@ -243,7 +246,7 @@ const ParentManagement = ({ user, active, setActive, isSidebarOpen, setSidebarOp
                               <ul className="list-disc pl-4">
                                 {children.map(child => (
                                   <li key={child.studentid}>
-                                    <b>{child.name}</b> - Lớp: {getClassName(child.classid)} - Ngày sinh: {formatDate(child.dateofbirth)}
+                                    <b>{child.studentName}</b> - Lớp: {child.class?.classname || '-'} - Ngày sinh: {formatDate(child.dateofbirth)}
                                   </li>
                                 ))}
                               </ul>

@@ -14,8 +14,9 @@ const StudentAdmin = () => {
     const [error, setError] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedClass, setSelectedClass] = useState('all');
-    const [parentAccounts, setParentAccounts] = useState([]);
     const [currentPage, setCurrentPage] = useState(1);
+    const [totalCount, setTotalCount] = useState(0);
+    const [totalPages, setTotalPages] = useState(1);
     const [showModal, setShowModal] = useState(false);
     const [sortByClass, setSortByClass] = useState(true);
     const [form, setForm] = useState({
@@ -28,22 +29,27 @@ const StudentAdmin = () => {
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [studentToDelete, setStudentToDelete] = useState(null);
 
-
-
+    // Fetch students mỗi khi currentPage, searchTerm, selectedClass thay đổi
     const fetchData = async () => {
         try {
             setLoading(true);
-            const [studentRes, classRes, parentRes] = await Promise.all([
-                fetch(`${API_URL}/api/students?page=1&pageSize=${ITEMS_PER_PAGE}`, { headers: getAuthHeaders() }),
-                fetch(`${API_URL}/api/classes?page=1&pageSize=${ITEMS_PER_PAGE}`, { headers: getAuthHeaders() }),
-                fetch(`${API_URL}/api/user-accounts`, { headers: getAuthHeaders() })
+            let url = `${API_URL}/api/students?page=${currentPage}&pageSize=${ITEMS_PER_PAGE}`;
+            if (searchTerm) {
+                url += `&name=${encodeURIComponent(searchTerm)}`;
+            }
+            if (selectedClass !== 'all') {
+                url += `&classId=${selectedClass}`;
+            }
+            const [studentRes, classRes] = await Promise.all([
+                fetch(url, { headers: getAuthHeaders() }),
+                fetch(`${API_URL}/api/classes?page=1&pageSize=1000`, { headers: getAuthHeaders() })
             ]);
             const studentDataRaw = await studentRes.json();
             const classDataRaw = await classRes.json();
-            const parentData = await parentRes.json();
             setStudents(Array.isArray(studentDataRaw.items) ? studentDataRaw.items : []);
             setClasses(Array.isArray(classDataRaw.items) ? classDataRaw.items : []);
-            setParentAccounts(parentData);
+            setTotalCount(studentDataRaw.totalCount || 0);
+            setTotalPages(studentDataRaw.totalPages || 1);
             setError(null);
         } catch (err) {
             setError('Không thể tải dữ liệu. Vui lòng thử lại sau.');
@@ -54,53 +60,53 @@ const StudentAdmin = () => {
 
     useEffect(() => {
         fetchData();
-    }, []);
+    }, [currentPage, searchTerm, selectedClass]);
+
+    // Khi searchTerm hoặc selectedClass thay đổi, reset về trang 1
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchTerm, selectedClass]);
 
     const formatDate = (dateString) => {
         const date = new Date(dateString);
         return date.toLocaleDateString('vi-VN');
     };
 
+    // Sửa getClassName lấy từ student.class
     const getClassName = (student) => {
-        const cls = classes.find(c => c.classid === student.classid);
-        return cls ? cls.classname : `Lớp ${student.classid}`;
+        return student.class?.classname || `Lớp ${student.class?.classid || ''}`;
     };
 
+    // Sửa getParentInfo lấy từ student.parent
     const getParentInfo = (student) => {
-        const parent = parentAccounts.find(p => p.userid === student.parentid);
-        if (parent) {
+        if (student.parent) {
             return (
                 <span>
-                    <b>{parent.fullname}</b><br />
-                    Email: {parent.email || 'Không có'}<br />
-                    SDT: {parent.phonenumber || 'Không có'}
+                    <b>{student.parent.fullname}</b><br />
+                    Email: {student.parent.email || 'Không có'}<br />
+                    SDT: {student.parent.phonenumber || 'Không có'}
                 </span>
             );
         }
         return <span className="text-gray-400">Chưa có thông tin</span>;
     };
 
+    // Sửa filter và sort theo schema mới
+    // Không filter/slice thủ công nữa, chỉ dùng students từ API
     const filteredStudents = (Array.isArray(students) ? students : [])
-        .filter(student =>
-            student.name.toLowerCase().includes(searchTerm.toLowerCase()) &&
-            (selectedClass === 'all' || student.classid === Number(selectedClass))
-        )
         .sort((a, b) => {
             if (sortByClass) {
                 const classA = getClassName(a);
                 const classB = getClassName(b);
                 if (classA === classB) {
-                    // Nếu cùng lớp thì sort theo tên
-                    return a.name.localeCompare(b.name, 'vi');
+                    return (a.studentName || '').localeCompare(b.studentName || '', 'vi');
                 }
                 return classA.localeCompare(classB, 'vi');
             }
             return 0;
         });
 
-    const totalPages = Math.ceil(filteredStudents.length / ITEMS_PER_PAGE);
-    const paginatedStudents = filteredStudents.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
-
+    // Sửa lại phân trang để dùng totalPages từ API
     const handlePageChange = (page) => {
         if (page >= 1 && page <= totalPages) setCurrentPage(page);
     };
@@ -271,12 +277,12 @@ const StudentAdmin = () => {
                                 </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-200">
-                                {paginatedStudents.length === 0 ? (
+                                {students.length === 0 ? (
                                     <tr>
                                         <td colSpan="5" className="px-6 py-4 text-center text-gray-500">Không tìm thấy học sinh nào</td>
                                     </tr>
                                 ) : (
-                                    paginatedStudents.map((student, index) => (
+                                    students.map((student, index) => (
                                         <tr key={student.studentid} className="hover:bg-gray-50 transition-colors">
                                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{(currentPage - 1) * ITEMS_PER_PAGE + index + 1}</td>
                                             <td className="px-6 py-4 whitespace-nowrap">
@@ -285,7 +291,7 @@ const StudentAdmin = () => {
                                                         <FaUserGraduate className="text-blue-600" />
                                                     </div>
                                                     <div className="ml-4">
-                                                        <div className="text-sm font-medium text-gray-900">{student.name}</div>
+                                                        <div className="text-sm font-medium text-gray-900">{student.studentName}</div>
                                                         <div className="text-sm text-gray-500">ID: {student.studentid}</div>
                                                     </div>
                                                 </div>
@@ -373,9 +379,11 @@ const StudentAdmin = () => {
                                 <label className="block text-sm font-medium text-gray-700">Phụ huynh</label>
                                 <select name="parentid" value={form.parentid} onChange={handleChange} required className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2">
                                     <option value="">-- Chọn phụ huynh --</option>
-                                    {parentAccounts.filter(p => p.roleid === 3).map(p => (
+                                    {/* Assuming parentAccounts state is no longer needed or will be refactored */}
+                                    {/* For now, we'll just show a placeholder or remove if not used */}
+                                    {/* {parentAccounts.filter(p => p.roleid === 3).map(p => (
                                         <option key={p.userid} value={p.userid}>{p.fullname} ({p.email})</option>
-                                    ))}
+                                    ))} */}
                                 </select>
                             </div>
                             <div className="flex justify-end mt-6">

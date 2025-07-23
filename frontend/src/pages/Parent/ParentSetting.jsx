@@ -51,7 +51,7 @@ const ParentSetting = ({ user }) => {
           username: data.username,
           avatarurl: data.avatarurl || ''
         });
-        setAvatarUrl(data.avatarurl || '');
+        setAvatarUrl(data.avatarUrl || data.avatarurl || "");
         setAvatarRemoved(false);
       } catch (err) {
         toast.error('Không lấy được thông tin cá nhân');
